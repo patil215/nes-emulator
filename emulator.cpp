@@ -12,10 +12,9 @@ unsigned char * buffer;
 // Hardware associated variables
 // TODO: Might have to initialize variables
 int pc;
-u_int8_t X;
-u_int8_t Y;
+int8_t X;
+int8_t Y;
 bool flags[8];
-
 
 
 using namespace std;
@@ -24,9 +23,10 @@ using namespace std;
 class Inst {
 
   void readVal();
+  void incrementPc();
 
   public:
-    enum Type { ADD, BRK, JSR, LDY, NOP};
+    enum Type { ADD, BRK, JSR, LDX, LDY, NOP};
     enum Admode {ABSOLUTE, NONE, ZERO_PAGE};
     void execute();
 
@@ -64,18 +64,38 @@ void setZFlag(int8_t result) {
   }
 }
 
+void Inst::incrementPc() {
+  switch (admode) {
+    case ZERO_PAGE:
+      pc += 2;
+      break;
+    case NONE:
+      pc += 1;
+      break;
+    default:
+      cout << "GOING TO DEFAULT - THIS PROBABLY ISN'T GOOD" << "\n";
+      break;
+  }
+}
+
 void Inst::execute() {
   switch (type) {
     case JSR:
       pc = a;
       break;
+    case LDX:
+      X = a;
+      setSFlag(X);
+      setZFlag(X);
+      incrementPc();
     case LDY:
       Y = a;
-      setSFlag((int8_t) a);
-      setZFlag((int8_t) a);
+      setSFlag(Y);
+      setZFlag(Y);
+      incrementPc();
       break;
     case NOP:
-      pc += 1;
+      incrementPc();
       break;
     default:
       cout << "Invalid command\n";
@@ -89,7 +109,7 @@ void Inst::readVal() {
     case ABSOLUTE:
       a = buffer[pos + 2];
       a = a << 8;
-      a += ::buffer[pos + 1];
+      a += buffer[pos + 1];
       break;
     case ZERO_PAGE:
       a = buffer[pos + 1];
@@ -104,6 +124,8 @@ Inst parseInstruction(int pos) {
   switch (code) {
     case 0x20:
       return Inst(Inst::JSR, Inst::ABSOLUTE, pos, buffer);
+    case 0xA6:
+      return Inst(Inst::LDX, Inst::ZERO_PAGE, pos, buffer);
     case 0xA4:
       return Inst(Inst::LDY, Inst::ZERO_PAGE, pos, buffer);
     default:
@@ -113,7 +135,7 @@ Inst parseInstruction(int pos) {
 
 
 void emulate() {
-  int numToRun = 3;
+  int numToRun = 4;
   for(int i = 0; i < numToRun; i++) {
     Inst inst = parseInstruction(pc);
 
@@ -124,6 +146,11 @@ void emulate() {
     if (inst.type == Inst::LDY) {
       cout << "loading into register y " << inst.a << "\n";
     }
+    
+    if (inst.type == Inst::LDX) {
+      cout << "loading into register x " << inst.a << "\n";
+    }
+
 
     if (inst.type == Inst::NOP) {
       cout << "no op " << "\n";
