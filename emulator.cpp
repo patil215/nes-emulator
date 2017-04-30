@@ -14,6 +14,7 @@ unsigned char * buffer;
 int pc;
 int8_t X;
 int8_t Y;
+int8_t A;
 bool flags[8];
 
 
@@ -26,7 +27,7 @@ class Inst {
   void incrementPc();
 
   public:
-    enum Type { ADD, BRK, JSR, LDX, LDY, NOP};
+    enum Type { ADD, BRK, JSR, LDX, LDY, TAX, TAY, NOP};
     enum Admode {ABSOLUTE, NONE, ZERO_PAGE};
     void execute();
 
@@ -88,6 +89,7 @@ void Inst::execute() {
       setSFlag(X);
       setZFlag(X);
       incrementPc();
+      break;
     case LDY:
       Y = a;
       setSFlag(Y);
@@ -95,6 +97,18 @@ void Inst::execute() {
       incrementPc();
       break;
     case NOP:
+      incrementPc();
+      break;
+    case TAX:
+      X = A;
+      setSFlag(X);
+      setZFlag(X);
+      incrementPc();
+      break;
+    case TAY:
+      Y = A;
+      setSFlag(Y);
+      setZFlag(Y);
       incrementPc();
       break;
     default:
@@ -128,6 +142,10 @@ Inst parseInstruction(int pos) {
       return Inst(Inst::LDX, Inst::ZERO_PAGE, pos, buffer);
     case 0xA4:
       return Inst(Inst::LDY, Inst::ZERO_PAGE, pos, buffer);
+    case 0xAA:
+      return Inst(Inst::TAX, Inst::NONE, pos, buffer);
+    case 0xA8:
+      return Inst(Inst::TAY, Inst::NONE, pos, buffer);
     default:
       return Inst(Inst::NOP, Inst::NONE, pos, buffer);
   }
@@ -135,7 +153,7 @@ Inst parseInstruction(int pos) {
 
 
 void emulate() {
-  int numToRun = 4;
+  int numToRun = 8;
   for(int i = 0; i < numToRun; i++) {
     Inst inst = parseInstruction(pc);
 
@@ -151,6 +169,13 @@ void emulate() {
       cout << "loading into register x " << inst.a << "\n";
     }
 
+    if (inst.type == Inst::TAX) {
+      cout << "loading into X from accumulator (value " << A << ")\n";
+    }
+
+    if (inst.type == Inst::TAY) {
+      cout << "loading into Y from accumulator (value " << A << ")\n";
+    }
 
     if (inst.type == Inst::NOP) {
       cout << "no op " << "\n";
