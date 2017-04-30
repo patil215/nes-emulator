@@ -15,7 +15,10 @@ int pc;
 int8_t X;
 int8_t Y;
 int8_t A;
+int SP = 0x1FF;
 bool flags[8];
+// TODO load program into memory, account for PRG-ROM, SRAM, Expansion ROM, I/O Registers
+int8_t memory[0x800];
 
 
 using namespace std;
@@ -28,7 +31,7 @@ class Inst {
 
   public:
     enum Type { ADD, BRK, JSR, LDX, LDY, TAX, TAY, NOP};
-    enum Admode {ABSOLUTE, NONE, ZERO_PAGE};
+    enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_INDEXED, INDEXED_ABSOLUTE, INDEXED_INDIRECT, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
     void execute();
 
     Inst (Type, Admode, int pos, unsigned char * buffer);
@@ -37,7 +40,8 @@ class Inst {
     Admode admode;
     int pos;
 
-    uint16_t a;
+    uint16_t adr;
+    int8_t val;
 };
 
 
@@ -79,19 +83,25 @@ void Inst::incrementPc() {
   }
 }
 
+void push(int8_t value) {
+  memory[SP] = value;
+  SP--;
+}
+
 void Inst::execute() {
   switch (type) {
     case JSR:
-      pc = a;
+      push(pc + 2);
+      pc = adr;
       break;
     case LDX:
-      X = a;
+      X = val;
       setSFlag(X);
       setZFlag(X);
       incrementPc();
       break;
     case LDY:
-      Y = a;
+      Y = val;
       setSFlag(Y);
       setZFlag(Y);
       incrementPc();
@@ -121,12 +131,77 @@ void Inst::execute() {
 void Inst::readVal() {
   switch (admode) {
     case ABSOLUTE:
-      a = buffer[pos + 2];
-      a = a << 8;
-      a += buffer[pos + 1];
+      adr = buffer[pos + 2];
+      adr = adr << 8;
+      adr += buffer[pos + 1];
+      val = memory[adr];
+      break;
+    case ACCUMULATOR:
+      val = A;
+      break;
+    case IMMEDIATE:
+      val = buffer[pos + 1];
+      break;
+    case ABSOLUTE_X:
+      adr = buffer[pos + 2];
+      adr = adr << 8;
+      adr += buffer[pos + 1];
+      adr += X;
+      val = memory[adr];
+      break;
+    case ABSOLUTE_Y:
+      adr = buffer[pos + 2];
+      adr = adr << 8;
+      adr += buffer[pos + 1];
+      adr += Y;
+      val = memory[adr];
+      break;
+    case ZERO_PAGE_X:
+      adr = ((int8_t) buffer[pos + 1]) + X;
+      val = memory[adr];
+      break;
+    case ZERO_PAGE_Y:
+      adr = ((int8_t) buffer[pos + 1]) + Y;
+      val = memory[adr];
+      break;
+    case INDEXED_INDIRECT:
+      {
+        int8_t op = buffer[pos + 1];
+        op += X;
+        adr = memory[op + 1];
+        adr = adr << 8;
+        adr += memory[op];
+        val = memory[adr];
+        break;
+      }
+    case INDIRECT:
+      {
+        u_int16_t address = buffer[pos + 2];
+        address = address << 8;
+        address += buffer[pos + 1];
+        adr = memory[address + 1];
+        adr = adr << 8;
+        adr += memory[address];
+        val = memory[adr];
+        break;
+      }
+    case INDIRECT_INDEXED:
+      {
+        int8_t op = buffer[pos + 1];
+        adr = memory[op + 1];
+        adr = adr << 8;
+        adr += memory[op];
+        adr += Y;
+        val = memory[adr];
+        break;
+      }
+    case RELATIVE:
+      // TODO this needs a special case
+      val = buffer[pos + 1];
       break;
     case ZERO_PAGE:
-      a = buffer[pos + 1];
+      adr = buffer[pos + 1];
+      val = memory[adr];
       break;
     default:
       break;
@@ -139,6 +214,7 @@ Inst parseInstruction(int pos) {
     case 0x20:
       return Inst(Inst::JSR, Inst::ABSOLUTE, pos, buffer);
     case 0xA6:
+      // TODO: does this load the value or memory[value]?
       return Inst(Inst::LDX, Inst::ZERO_PAGE, pos, buffer);
     case 0xA4:
       return Inst(Inst::LDY, Inst::ZERO_PAGE, pos, buffer);
@@ -158,23 +234,23 @@ void emulate() {
     Inst inst = parseInstruction(pc);
 
     if (inst.type == Inst::JSR && inst.admode == Inst::ABSOLUTE) {
-      cout << "doing absolute jump to address " << inst.a <<  "\n";
+      cout << "doing absolute jump to address " << inst.adr <<  "\n";
     }
 
     if (inst.type == Inst::LDY) {
-      cout << "loading into register y " << inst.a << "\n";
+      cout << "loading into register y " << (int) inst.val << " with address " << inst.adr << "\n";
     }
     
     if (inst.type == Inst::LDX) {
-      cout << "loading into register x " << inst.a << "\n";
+      cout << "loading into register x " << (int) inst.val << " with address " << inst.adr << "\n";
     }
 
     if (inst.type == Inst::TAX) {
-      cout << "loading into X from accumulator (value " << A << ")\n";
+      cout << "loading into X from accumulator (value " << (int) A << ")\n";
     }
 
     if (inst.type == Inst::TAY) {
-      cout << "loading into Y from accumulator (value " << A << ")\n";
+      cout << "loading into Y from accumulator (value " << (int) A << ")\n";
     }
 
     if (inst.type == Inst::NOP) {
