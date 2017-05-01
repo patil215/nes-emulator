@@ -30,7 +30,7 @@ class Inst {
   void incrementPc();
 
   public:
-    enum Type { ADC, AND, ASL, BIT, BRK, CMP, JSR, LDX, LDY, TAX, TAY, NOP};
+    enum Type { ADC, AND, ASL, BIT, BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ, BRK, CMP, CPX, CPY, JSR, LDX, LDY, TAX, TAY, NOP};
     enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_X, INDEXED_ABSOLUTE, INDIRECT_Y, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
     void execute();
 
@@ -53,6 +53,38 @@ Inst::Inst(Type type_t, Admode admode_t, int pos_t, unsigned char * buffer_t) {
   readVal();
 }
 
+bool getCFlag() {
+  return flags[0];
+}
+
+bool getZFlag() {
+  return flags[1];
+}
+
+bool getIFlag() {
+  return flags[2];
+}
+
+bool getDFlag() {
+  return flags[3];
+}
+
+bool getBFlag() {
+  return flags[4];
+}
+
+bool getVFlag() {
+  return flags[6];
+}
+
+bool getSFlag() {
+  return flags[7];
+}
+
+void setBFlag(bool result) {
+  flags[4] = result;
+}
+
 void setCFlag(bool result) {
   flags[0] = result;
 }
@@ -63,27 +95,65 @@ void setVFlag(bool result) {
 
 void setSFlag(int8_t result) {
   if(result < 0) {
-    flags[7] = 1;
+    flags[7] = true;
   } else {
-    flags[7] = 0;
+    flags[7] = false;
   }
 }
 
 void setZFlag(int8_t result) {
   if(result == 0) {
-    flags[1] = 1;
+    flags[1] = true;
   } else {
-    flags[1] = 0;
+    flags[1] = false;
   }
 }
 
+
+    enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_X, INDEXED_ABSOLUTE, INDIRECT_Y, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
 void Inst::incrementPc() {
   switch (admode) {
-    case ZERO_PAGE:
+    case ABSOLUTE:
+      pc += 3;
+      break;
+    case ABSOLUTE_X:
+      pc += 3;
+      break;
+    case ABSOLUTE_Y:
+      pc += 3;
+      break;
+    case ACCUMULATOR:
+      pc += 1;
+      break;
+    case IMMEDIATE:
+      pc += 2;
+      break;
+    case INDIRECT:
+      pc += 3;
+      break;
+    case INDIRECT_X:
+      pc += 2;
+      break;
+    case INDEXED_ABSOLUTE:
+      pc += 3;
+      break;
+    case INDIRECT_Y:
+      pc += 2;
+      break;
+    case ZERO_PAGE_X:
+      pc += 2;
+      break;
+    case ZERO_PAGE_Y:
       pc += 2;
       break;
     case NONE:
       pc += 1;
+      break;
+    case RELATIVE:
+      break;
+      pc += 2;
+    case ZERO_PAGE:
+      pc += 2;
       break;
     default:
       cout << "GOING TO DEFAULT - THIS PROBABLY ISN'T GOOD" << "\n";
@@ -109,6 +179,7 @@ void Inst::execute() {
       setVFlag(notoverflow != A);
       setZFlag(A);
       setCFlag(notcarry != ((u_int8_t) A));
+      incrementPc();
       break;
     }
     case AND:
@@ -116,6 +187,7 @@ void Inst::execute() {
       A = A & val;
       setZFlag(A);
       setSFlag(A);
+      incrementPc();
       break;
     }
     case ASL:
@@ -123,6 +195,8 @@ void Inst::execute() {
       // TODO this one is messed up because it directly shifts memory
       //setCFlag(A & 0x80);
       //A = A << 1;
+      incrementPc();
+      break;
     }
     case BIT:
     {
@@ -130,8 +204,100 @@ void Inst::execute() {
       flags[7] = (0x80 & val) > 0;
       flags[6] = (0x40 & val) > 0;
       setZFlag(val & A);
+      incrementPc();
       break;
     }
+    case BPL:
+    {
+      if (!getSFlag()) {
+        pc += val;
+      } 
+      incrementPc();
+    }
+    case BMI:
+    {
+      if(getSFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BVC:
+    {
+      if(!getVFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BVS:
+    {
+      if(getVFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BCC:
+    {
+      if(!getCFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BCS:
+    {
+      if(getCFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BNE:
+    {
+      if(!getZFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BEQ:
+    {
+      if(getZFlag()) {
+        pc += val;
+      }
+      incrementPc();
+      break;
+    }
+    case BRK:
+    {
+      setBFlag(true);
+      incrementPc();
+      break;
+    }
+    case CMP:
+    {
+      setCFlag(A >= val);
+      setZFlag(A - val);
+      setSFlag(A - val);
+      break;
+    }
+    case CPX:
+    {
+      setCFlag(X >= val);
+      setZFlag(X - val);
+      setSFlag(X - val);
+      break;
+    }
+    case CPY:
+    {
+      setCFlag(Y >= val);
+      setZFlag(Y - val);
+      setSFlag(Y - val);
+      break;
+    }
+
     case JSR:
     {
       push(pc + 2);
@@ -250,7 +416,7 @@ void Inst::readVal() {
         break;
       }
     case RELATIVE:
-      // TODO this needs a special case
+      // TODO this might need a special case
       val = buffer[pos + 1];
       break;
     case ZERO_PAGE:
@@ -315,6 +481,59 @@ Inst parseInstruction(int pos) {
       return Inst(Inst::BIT, Inst::ZERO_PAGE, pos, buffer);
     case 0x2C:
       return Inst(Inst::BIT, Inst::ABSOLUTE, pos, buffer);
+
+    case 0x10:
+      return Inst(Inst::BPL, Inst::NONE, pos, buffer);
+    case 0x30:
+      return Inst(Inst::BMI, Inst::NONE, pos, buffer);
+    case 0x50:
+      return Inst(Inst::BVC, Inst::NONE, pos, buffer);
+    case 0x70:
+      return Inst(Inst::BVS, Inst::NONE, pos, buffer);
+    case 0x90:
+      return Inst(Inst::BCC, Inst::NONE, pos, buffer);
+    case 0xB0:
+      return Inst(Inst::BCS, Inst::NONE, pos, buffer);
+    case 0xD0:
+      return Inst(Inst::BNE, Inst::NONE, pos, buffer);
+    case 0xF0:
+      return Inst(Inst::BEQ, Inst::NONE, pos, buffer);
+
+    case 0x00:
+      return Inst(Inst::BRK, Inst::NONE, pos, buffer);
+
+    case 0xC9:
+      return Inst(Inst::CMP, Inst::IMMEDIATE, pos, buffer);
+    case 0xC5:
+      return Inst(Inst::CMP, Inst::ZERO_PAGE, pos, buffer);
+    case 0xD5:
+      return Inst(Inst::CMP, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0xCD:
+      return Inst(Inst::CMP, Inst::ABSOLUTE, pos, buffer);
+    case 0xDD:
+      return Inst(Inst::CMP, Inst::ABSOLUTE_X, pos, buffer);
+    case 0xD9:
+      return Inst(Inst::CMP, Inst::ABSOLUTE_Y, pos, buffer);
+    case 0xC1:
+      return Inst(Inst::CMP, Inst::INDIRECT_X, pos, buffer);
+    case 0xD1:
+      return Inst(Inst::CMP, Inst::INDIRECT_Y, pos, buffer);
+
+    case 0xE0:
+      return Inst(Inst::CPX, Inst::IMMEDIATE, pos, buffer);
+    case 0xE4:
+      return Inst(Inst::CPX, Inst::ZERO_PAGE, pos, buffer);
+    case 0xEC:
+      return Inst(Inst::CPX, Inst::ABSOLUTE, pos, buffer);
+
+    case 0xC0:
+      return Inst(Inst::CPY, Inst::IMMEDIATE, pos, buffer);
+    case 0xC4:
+      return Inst(Inst::CPY, Inst::ZERO_PAGE, pos, buffer);
+    case 0xCC:
+      return Inst(Inst::CPY, Inst::ABSOLUTE, pos, buffer);
+
+
 
     case 0x20:
       return Inst(Inst::JSR, Inst::ABSOLUTE, pos, buffer);
