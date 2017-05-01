@@ -30,7 +30,7 @@ class Inst {
   void incrementPc();
 
   public:
-    enum Type { ADC, AND, ASL, BIT, BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ, BRK, CMP, CPX, CPY, JSR, LDX, LDY, TAX, TAY, NOP};
+    enum Type { ADC, AND, ASL, BIT, BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ, BRK, CMP, CPX, CPY, DEC, EOR, CLC, SEC, CLI, SEI, CLV, CLD, SED, INC, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, TAX, TXA, DEX, INX, TAY, TYA, DEY, INY};
     enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_X, INDEXED_ABSOLUTE, INDIRECT_Y, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
     void execute();
 
@@ -79,6 +79,14 @@ bool getVFlag() {
 
 bool getSFlag() {
   return flags[7];
+}
+
+void setIFlag(bool result) {
+  flags[2] = result;
+}
+
+void setDFlag(bool result) {
+  flags[3] = result;
 }
 
 void setBFlag(bool result) {
@@ -281,6 +289,7 @@ void Inst::execute() {
       setCFlag(A >= val);
       setZFlag(A - val);
       setSFlag(A - val);
+      incrementPc();
       break;
     }
     case CPX:
@@ -288,6 +297,7 @@ void Inst::execute() {
       setCFlag(X >= val);
       setZFlag(X - val);
       setSFlag(X - val);
+      incrementPc();
       break;
     }
     case CPY:
@@ -295,13 +305,86 @@ void Inst::execute() {
       setCFlag(Y >= val);
       setZFlag(Y - val);
       setSFlag(Y - val);
+      incrementPc();
       break;
     }
-
+    case DEC:
+    {
+      // TODO
+      incrementPc();
+      break;
+    }
+    case EOR:
+    {
+      // TODO
+      incrementPc();
+      break;
+    }
+    case CLC:
+    {
+      setCFlag(false);
+      incrementPc();
+      break;
+    }
+    case SEC:
+    {
+      setCFlag(true);
+      incrementPc();
+      break;
+    }
+    case CLI:
+    {
+      setIFlag(false);
+      incrementPc();
+      break;
+    }
+    case SEI:
+    {
+      setIFlag(true);
+      incrementPc();
+      break;
+    }
+    case CLV:
+    {
+      setVFlag(false);
+      incrementPc();
+      break;
+    }
+    case CLD:
+    {
+      setDFlag(false);
+      incrementPc();
+      break;
+    }
+    case SED:
+    {
+      setDFlag(true);
+      incrementPc();
+      break;
+    }
+    case INC:
+    {
+      // TODO
+      incrementPc();
+      break;
+    }
+    case JMP:
+    {
+      pc = adr;
+      break;
+    }
     case JSR:
     {
       push(pc + 2);
       pc = adr;
+      break;
+    }
+    case LDA:
+    {
+      A = val;
+      setSFlag(A);
+      setZFlag(A);
+      incrementPc();
       break;
     }
     case LDX:
@@ -320,10 +403,24 @@ void Inst::execute() {
       incrementPc();
       break;
       }
+    case LSR:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
     case NOP:
       {
       incrementPc();
       break;
+      }
+    case ORA:
+      {
+        A = A | val;
+        setSFlag(A);
+        setZFlag(A);
+        incrementPc();
+        break;
       }
     case TAX:
       {
@@ -333,6 +430,30 @@ void Inst::execute() {
       incrementPc();
       break;
       }
+    case TXA:
+      {
+        A = X;
+        setSFlag(A);
+        setZFlag(A);
+        incrementPc();
+        break;
+      }
+    case DEX:
+      {
+        X--;
+        setSFlag(X);
+        setZFlag(X);
+        incrementPc();
+        break;
+      }
+    case INX:
+      {
+        X++;
+        setSFlag(X);
+        setZFlag(X);
+        incrementPc();
+        break;
+      }
     case TAY:
       {
       Y = A;
@@ -340,6 +461,30 @@ void Inst::execute() {
       setZFlag(Y);
       incrementPc();
       break;
+      }
+    case TYA:
+      {
+        A = Y;
+        setSFlag(A);
+        setZFlag(A);
+        incrementPc();
+        break;
+      }
+    case DEY:
+      {
+        Y--;
+        setSFlag(Y);
+        setZFlag(Y);
+        incrementPc();
+        break;
+      }
+    case INY:
+      {
+        Y++;
+        setSFlag(Y);
+        setZFlag(Y);
+        incrementPc();
+        break;
       }
     default:
       cout << "Invalid command\n";
@@ -534,18 +679,153 @@ Inst parseInstruction(int pos) {
       return Inst(Inst::CPY, Inst::ABSOLUTE, pos, buffer);
 
 
+    case 0xC6:
+      return Inst(Inst::DEC, Inst::ZERO_PAGE, pos, buffer);
+    case 0xD6:
+      return Inst(Inst::DEC, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0xCE:
+      return Inst(Inst::DEC, Inst::ABSOLUTE, pos, buffer);
+    case 0xDE:
+      return Inst(Inst::DEC, Inst::ABSOLUTE_X, pos, buffer);
+
+    case 0x49:
+      return Inst(Inst::EOR, Inst::IMMEDIATE, pos, buffer);
+    case 0x45:
+      return Inst(Inst::EOR, Inst::ZERO_PAGE, pos, buffer);
+    case 0x55:
+      return Inst(Inst::EOR, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x4D:
+      return Inst(Inst::EOR, Inst::ABSOLUTE, pos, buffer);
+    case 0x5D:
+      return Inst(Inst::EOR, Inst::ABSOLUTE_X, pos, buffer);
+    case 0x59:
+      return Inst(Inst::EOR, Inst::ABSOLUTE_Y, pos, buffer);
+    case 0x41:
+      return Inst(Inst::EOR, Inst::INDIRECT_X, pos, buffer);
+    case 0x51:
+      return Inst(Inst::EOR, Inst::INDIRECT_Y, pos, buffer);
+
+    case 0x18:
+      return Inst(Inst::CLC, Inst::NONE, pos, buffer);
+    case 0x38:
+      return Inst(Inst::SEC, Inst::NONE, pos, buffer);
+    case 0x58:
+      return Inst(Inst::CLI, Inst::NONE, pos, buffer);
+    case 0x78:
+      return Inst(Inst::SEI, Inst::NONE, pos, buffer);
+    case 0xB8:
+      return Inst(Inst::CLV, Inst::NONE, pos, buffer);
+    case 0xD8:
+      return Inst(Inst::CLD, Inst::NONE, pos, buffer);
+    case 0xF8:
+      return Inst(Inst::SED, Inst::NONE, pos, buffer);
+
+
+    case 0xE6:
+      return Inst(Inst::INC, Inst::ZERO_PAGE, pos, buffer);
+    case 0xF6:
+      return Inst(Inst::INC, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0xEE:
+      return Inst(Inst::INC, Inst::ABSOLUTE, pos, buffer);
+    case 0xFE:
+      return Inst(Inst::INC, Inst::ABSOLUTE_X, pos, buffer);
+
+    case 0x4C:
+      return Inst(Inst::JMP, Inst::ABSOLUTE, pos, buffer);
+    case 0x6C:
+      return Inst(Inst::JMP, Inst::INDIRECT, pos, buffer);
 
     case 0x20:
       return Inst(Inst::JSR, Inst::ABSOLUTE, pos, buffer);
-    case 0xA6:
+
+    case 0xA9:
+      return Inst(Inst::LDA, Inst::IMMEDIATE, pos, buffer);
+    case 0xA5:
+      return Inst(Inst::LDA, Inst::ZERO_PAGE, pos, buffer);
+    case 0xB5:
+      return Inst(Inst::LDA, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0xAD:
+      return Inst(Inst::LDA, Inst::ABSOLUTE, pos, buffer);
+    case 0xBD:
+      return Inst(Inst::LDA, Inst::ABSOLUTE_X, pos, buffer);
+    case 0xB9:
+      return Inst(Inst::LDA, Inst::ABSOLUTE_Y, pos, buffer);
+    case 0xA1:
+      return Inst(Inst::LDA, Inst::INDIRECT_X, pos, buffer);
+    case 0xB1:
+      return Inst(Inst::LDA, Inst::INDIRECT_Y, pos, buffer);
+
+    case 0xA2:
       // TODO: does this load the value or memory[value]?
+      return Inst(Inst::LDX, Inst::IMMEDIATE, pos, buffer);
+    case 0xA6:
       return Inst(Inst::LDX, Inst::ZERO_PAGE, pos, buffer);
+    case 0xB6:
+      return Inst(Inst::LDX, Inst::ZERO_PAGE_Y, pos, buffer);
+    case 0xAE:
+      return Inst(Inst::LDX, Inst::ABSOLUTE, pos, buffer);
+    case 0xBE:
+      return Inst(Inst::LDX, Inst::ABSOLUTE_Y, pos, buffer);
+
+    case 0xA0:
+      return Inst(Inst::LDY, Inst::IMMEDIATE, pos, buffer);
     case 0xA4:
       return Inst(Inst::LDY, Inst::ZERO_PAGE, pos, buffer);
+    case 0xB4:
+      return Inst(Inst::LDY, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0xAC:
+      return Inst(Inst::LDY, Inst::ABSOLUTE, pos, buffer);
+    case 0xBC:
+      return Inst(Inst::LDY, Inst::ABSOLUTE_X, pos, buffer);
+
+    case 0x4A:
+      return Inst(Inst::LSR, Inst::ACCUMULATOR, pos, buffer);
+    case 0x46:
+      return Inst(Inst::LSR, Inst::ZERO_PAGE, pos, buffer);
+    case 0x56:
+      return Inst(Inst::LSR, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x4E:
+      return Inst(Inst::LSR, Inst::ABSOLUTE, pos, buffer);
+    case 0x5E:
+      return Inst(Inst::LSR, Inst::ABSOLUTE_X, pos, buffer);
+
+    case 0xEA:
+      return Inst(Inst::NOP, Inst::NONE, pos, buffer);
+
+    case 0x09:
+      return Inst(Inst::ORA, Inst::IMMEDIATE, pos, buffer);
+    case 0x05:
+      return Inst(Inst::ORA, Inst::ZERO_PAGE, pos, buffer);
+    case 0x15:
+      return Inst(Inst::ORA, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x0D:
+      return Inst(Inst::ORA, Inst::ABSOLUTE, pos, buffer);
+    case 0x1D:
+      return Inst(Inst::ORA, Inst::ABSOLUTE_X, pos, buffer);
+    case 0x19:
+      return Inst(Inst::ORA, Inst::ABSOLUTE_Y, pos, buffer);
+    case 0x01:
+      return Inst(Inst::ORA, Inst::INDIRECT_X, pos, buffer);
+    case 0x11:
+      return Inst(Inst::ORA, Inst::INDIRECT_Y, pos, buffer);
+
     case 0xAA:
       return Inst(Inst::TAX, Inst::NONE, pos, buffer);
+    case 0x8A:
+      return Inst(Inst::TXA, Inst::NONE, pos, buffer);
+    case 0xCA:
+      return Inst(Inst::DEX, Inst::NONE, pos, buffer);
+    case 0xE8:
+      return Inst(Inst::INX, Inst::NONE, pos, buffer);
     case 0xA8:
       return Inst(Inst::TAY, Inst::NONE, pos, buffer);
+    case 0x98:
+      return Inst(Inst::TYA, Inst::NONE, pos, buffer);
+    case 0x88:
+      return Inst(Inst::DEY, Inst::NONE, pos, buffer);
+    case 0xC8:
+      return Inst(Inst::INY, Inst::NONE, pos, buffer);
+
     default:
       return Inst(Inst::NOP, Inst::NONE, pos, buffer);
   }
