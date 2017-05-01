@@ -16,79 +16,12 @@ int pc;
 int8_t X;
 int8_t Y;
 int8_t A;
-int SP = 0x1FF;
-bool flags[8];
+Flags flags;
 // TODO load program into memory, account for PRG-ROM, SRAM, Expansion ROM, I/O Registers
 Memory memory;
 
 
 using namespace std;
-
-
-bool getCFlag() {
-  return flags[0];
-}
-
-bool getZFlag() {
-  return flags[1];
-}
-
-bool getIFlag() {
-  return flags[2];
-}
-
-bool getDFlag() {
-  return flags[3];
-}
-
-bool getBFlag() {
-  return flags[4];
-}
-
-bool getVFlag() {
-  return flags[6];
-}
-
-bool getSFlag() {
-  return flags[7];
-}
-
-void setIFlag(bool result) {
-  flags[2] = result;
-}
-
-void setDFlag(bool result) {
-  flags[3] = result;
-}
-
-void setBFlag(bool result) {
-  flags[4] = result;
-}
-
-void setCFlag(bool result) {
-  flags[0] = result;
-}
-
-void setVFlag(bool result) {
-  flags[6] = result;
-}
-
-void setSFlag(int8_t result) {
-  if(result < 0) {
-    flags[7] = true;
-  } else {
-    flags[7] = false;
-  }
-}
-
-void setZFlag(int8_t result) {
-  if(result == 0) {
-    flags[1] = true;
-  } else {
-    flags[1] = false;
-  }
-}
-
 
 void incrementPc(Inst inst) {
   switch (inst.admode) {
@@ -140,59 +73,12 @@ void incrementPc(Inst inst) {
   }
 }
 
-void push(int8_t value) {
-  SP--;
-  memory.write(value, SP);
-}
-
-int8_t pop() {
-  int8_t value = memory.read(SP);
-  SP++;
-  return value;
-}
-
 void setupMem() {
   for (int i = 0; i < Prg_Size; i++) {
     memory.write(buffer[i + 16], i + 0x8000);
   }
 }
 
-void pushFlags() {
-  u_int8_t f = 0;
-  f += (getSFlag() ? 1 : 0);
-  f = f << 1;
-  f += (getVFlag() ? 1 : 0);
-  f = f << 1;
-  f = f << 1;
-  f += (getBFlag() ? 1 : 0);
-  f = f << 1;
-  f += (getDFlag() ? 1 : 0);
-  f = f << 1;
-  f += (getIFlag() ? 1 : 0);
-  f = f << 1;
-  f += (getZFlag() ? 1 : 0);
-  f = f << 1;
-  f += (getCFlag() ? 1 : 0);
-}
-
-void popFlags() {
-  u_int8_t f = pop();
-  if ((f & 0x80) > 0) {
-    setSFlag(-1);
-  } else {
-    setSFlag(1);
-  }
-  setVFlag((f & 0x40) > 0);
-  setBFlag((f & 0x10) > 0);
-  setDFlag((f & 0x8) > 0);
-  setIFlag((f & 0x4) > 0);
-  if ((f & 0x2) > 0) {
-    setZFlag(0);
-  } else {
-    setZFlag(1);
-  }
-  setCFlag((f & 0x1) > 0);
-}
 
 void execute(Inst inst) {
   int8_t val = inst.val;
@@ -201,42 +87,42 @@ void execute(Inst inst) {
   switch (inst.type) {
     case Inst::ADC:
     {
-      u_int8_t carry = getCFlag() ? 1 : 0;
+      u_int8_t carry = flags.getCB();
       // TODO: this logic might not be right
       int16_t notoverflow = ((int16_t) A) + ((int16_t) val) + carry;
       // TODO: this logic definitely not right
       u_int16_t notcarry = ((u_int16_t) A) + ((u_int16_t) val) + carry;
 
       A = A + val + carry;
-      setSFlag(A);
-      setVFlag(notoverflow != A);
-      setZFlag(A);
-      setCFlag(notcarry != ((u_int8_t) A));
+      flags.autoSetS(A);
+      flags.setV(notoverflow != A);
+      flags.autoSetZ(A);
+      flags.setC(notcarry != ((u_int8_t) A));
       incrementPc(inst);
       break;
     }
     case Inst::AND:
     {
       A = A & val;
-      setZFlag(A);
-      setSFlag(A);
+      flags.autoSetZ(A);
+      flags.autoSetS(A);
       incrementPc(inst);
       break;
     }
     case Inst::ASL:
     {
       
-      setCFlag(val & 0x80);
+      flags.setCB(val & 0x80);
       // TODO is this actually an arithmetic shift
       val = val << 1;
       if (admode == Inst::ACCUMULATOR) {
         A = val;
-        setSFlag(A);
-        setZFlag(A);
+        flags.autoSetS(A);
+        flags.autoSetZ(A);
       } else {
         memory.write(val, adr);
-        setSFlag(memory.read(adr));
-        setZFlag(memory.read(adr));
+        flags.autoSetS(memory.read(adr));
+        flags.autoSetZ(memory.read(adr));
       }
       incrementPc(inst);
       break;
@@ -244,15 +130,15 @@ void execute(Inst inst) {
     case Inst::BIT:
     {
       // TODO Probably bug
-      flags[7] = (0x80 & val) > 0;
-      flags[6] = (0x40 & val) > 0;
-      setZFlag(val & A);
+      flags.setSB(0x80 & val);
+      flags.setVB(0x40 & val);
+      flags.setZB(val & A);
       incrementPc(inst);
       break;
     }
     case Inst::BPL:
     {
-      if (!getSFlag()) {
+      if (!flags.getS()) {
         pc += val;
       } 
       incrementPc(inst);
@@ -260,7 +146,7 @@ void execute(Inst inst) {
     }
     case Inst::BMI:
     {
-      if(getSFlag()) {
+      if(flags.getS()) {
         pc += val;
       }
       incrementPc(inst);
@@ -268,7 +154,7 @@ void execute(Inst inst) {
     }
     case Inst::BVC:
     {
-      if(!getVFlag()) {
+      if(!flags.getV()) {
         pc += val;
       }
       incrementPc(inst);
@@ -276,7 +162,7 @@ void execute(Inst inst) {
     }
     case Inst::BVS:
     {
-      if(getVFlag()) {
+      if(flags.getV()) {
         pc += val;
       }
       incrementPc(inst);
@@ -284,7 +170,7 @@ void execute(Inst inst) {
     }
     case Inst::BCC:
     {
-      if(!getCFlag()) {
+      if(!flags.getC()) {
         pc += val;
       }
       incrementPc(inst);
@@ -292,7 +178,7 @@ void execute(Inst inst) {
     }
     case Inst::BCS:
     {
-      if(getCFlag()) {
+      if(flags.getC()) {
         pc += val;
       }
       incrementPc(inst);
@@ -300,7 +186,7 @@ void execute(Inst inst) {
     }
     case Inst::BNE:
     {
-      if(!getZFlag()) {
+      if(!flags.getZ()) {
         pc += val;
       }
       incrementPc(inst);
@@ -308,7 +194,7 @@ void execute(Inst inst) {
     }
     case Inst::BEQ:
     {
-      if(getZFlag()) {
+      if(flags.getZ()) {
         pc += val;
       }
       incrementPc(inst);
@@ -316,97 +202,97 @@ void execute(Inst inst) {
     }
     case Inst::BRK:
     {
-      setBFlag(true);
+      flags.setB(true);
       incrementPc(inst);
       break;
     }
     case Inst::CMP:
     {
-      setCFlag(A >= val);
-      setZFlag(A - val);
-      setSFlag(A - val);
+      flags.setC(A >= val);
+      flags.autoSetZ(A - val);
+      flags.autoSetS(A - val);
       incrementPc(inst);
       break;
     }
     case Inst::CPX:
     {
-      setCFlag(X >= val);
-      setZFlag(X - val);
-      setSFlag(X - val);
+      flags.setC(X >= val);
+      flags.autoSetZ(X - val);
+      flags.autoSetS(X - val);
       incrementPc(inst);
       break;
     }
     case Inst::CPY:
     {
-      setCFlag(Y >= val);
-      setZFlag(Y - val);
-      setSFlag(Y - val);
+      flags.setC(Y >= val);
+      flags.autoSetZ(Y - val);
+      flags.autoSetS(Y - val);
       incrementPc(inst);
       break;
     }
     case Inst::DEC:
     {
       memory.write(memory.read(adr) - 1, adr);
-      setSFlag(memory.read(adr));
-      setZFlag(memory.read(adr));
+      flags.autoSetS(memory.read(adr));
+      flags.autoSetZ(memory.read(adr));
       incrementPc(inst);
       break;
     }
     case Inst::EOR:
     {
       A = A ^ val;
-      setSFlag(A);
-      setZFlag(A);
+      flags.autoSetS(A);
+      flags.autoSetZ(A);
       incrementPc(inst);
       break;
     }
     case Inst::CLC:
     {
-      setCFlag(false);
+      flags.setC(false);
       incrementPc(inst);
       break;
     }
     case Inst::SEC:
     {
-      setCFlag(true);
+      flags.setC(true);
       incrementPc(inst);
       break;
     }
     case Inst::CLI:
     {
-      setIFlag(false);
+      flags.setI(false);
       incrementPc(inst);
       break;
     }
     case Inst::SEI:
     {
-      setIFlag(true);
+      flags.setI(true);
       incrementPc(inst);
       break;
     }
     case Inst::CLV:
     {
-      setVFlag(false);
+      flags.setV(false);
       incrementPc(inst);
       break;
     }
     case Inst::CLD:
     {
-      setDFlag(false);
+      flags.setD(false);
       incrementPc(inst);
       break;
     }
     case Inst::SED:
     {
-      setDFlag(true);
+      flags.setD(true);
       incrementPc(inst);
       break;
     }
     case Inst::INC:
     {
       memory.write(memory.read(adr) + 1, adr);
-      setSFlag(memory.read(adr));
-      setZFlag(memory.read(adr));
+      flags.autoSetS(memory.read(adr));
+      flags.autoSetZ(memory.read(adr));
       incrementPc(inst);
       break;
     }
@@ -417,48 +303,48 @@ void execute(Inst inst) {
     }
     case Inst::JSR:
     {
-      push((u_int8_t) (pc + 2));
-      push((u_int8_t) ((pc + 2) >> 8));
+      memory.push((u_int8_t) (pc + 2));
+      memory.push((u_int8_t) ((pc + 2) >> 8));
       pc = adr;
       break;
     }
     case Inst::LDA:
     {
       A = val;
-      setSFlag(A);
-      setZFlag(A);
+      flags.autoSetS(A);
+      flags.autoSetZ(A);
       incrementPc(inst);
       break;
     }
     case Inst::LDX:
       {
       X = val;
-      setSFlag(X);
-      setZFlag(X);
+      flags.autoSetS(X);
+      flags.autoSetZ(X);
       incrementPc(inst);
       break;
       }
     case Inst::LDY:
       {
       Y = val;
-      setSFlag(Y);
-      setZFlag(Y);
+      flags.autoSetS(Y);
+      flags.autoSetZ(Y);
       incrementPc(inst);
       break;
       }
     case Inst::LSR:
       {
-        setCFlag((0x1 & val) > 0);
+        flags.setCB(0x1 & val);
         // TODO is this actually a logical shift
         val = val >> 1;
         if (admode == Inst::ACCUMULATOR) {
           A = val;
-          setSFlag(A);
-          setZFlag(A);
+          flags.autoSetS(A);
+          flags.autoSetZ(A);
         } else {
           memory.write(val, adr);
-          setSFlag(memory.read(adr));
-          setZFlag(memory.read(adr));
+          flags.autoSetS(memory.read(adr));
+          flags.autoSetZ(memory.read(adr));
         }
         incrementPc(inst);
         break;
@@ -471,132 +357,133 @@ void execute(Inst inst) {
     case Inst::ORA:
       {
         A = A | val;
-        setSFlag(A);
-        setZFlag(A);
+        flags.autoSetS(A);
+        flags.autoSetZ(A);
         incrementPc(inst);
         break;
       }
     case Inst::TAX:
       {
       X = A;
-      setSFlag(X);
-      setZFlag(X);
+      flags.autoSetS(X);
+      flags.autoSetZ(X);
       incrementPc(inst);
       break;
       }
     case Inst::TXA:
       {
         A = X;
-        setSFlag(A);
-        setZFlag(A);
+        flags.autoSetS(A);
+        flags.autoSetZ(A);
         incrementPc(inst);
         break;
       }
     case Inst::DEX:
       {
         X--;
-        setSFlag(X);
-        setZFlag(X);
+        flags.autoSetS(X);
+        flags.autoSetZ(X);
         incrementPc(inst);
         break;
       }
     case Inst::INX:
       {
         X++;
-        setSFlag(X);
-        setZFlag(X);
+        flags.autoSetS(X);
+        flags.autoSetZ(X);
         incrementPc(inst);
         break;
       }
     case Inst::TAY:
       {
       Y = A;
-      setSFlag(Y);
-      setZFlag(Y);
+      flags.autoSetS(Y);
+      flags.autoSetZ(Y);
       incrementPc(inst);
       break;
       }
     case Inst::TYA:
       {
         A = Y;
-        setSFlag(A);
-        setZFlag(A);
+        flags.autoSetS(A);
+        flags.autoSetZ(A);
         incrementPc(inst);
         break;
       }
     case Inst::DEY:
       {
         Y--;
-        setSFlag(Y);
-        setZFlag(Y);
+        flags.autoSetS(Y);
+        flags.autoSetZ(Y);
         incrementPc(inst);
         break;
       }
     case Inst::INY:
       {
         Y++;
-        setSFlag(Y);
-        setZFlag(Y);
+        flags.autoSetS(Y);
+        flags.autoSetZ(Y);
         incrementPc(inst);
         break;
       }
     case Inst::ROL:
       {
-        u_int8_t carryBit = getCFlag() ? 1 : 0;
-        setCFlag((val & 0x80) > 0);
+        u_int8_t carryBit = flags.getCB();
+        flags.setCB(val & 0x80);
         val = val << 1;
         val += carryBit;
         if (admode == Inst::ACCUMULATOR) {
           A = val;
-          setSFlag(A);
-          setZFlag(A);
+          flags.autoSetS(A);
+          flags.autoSetZ(A);
         } else {
           memory.write(val, adr);
-          setSFlag(memory.read(adr));
-          setZFlag(memory.read(adr));
+          flags.autoSetS(memory.read(adr));
+          flags.autoSetZ(memory.read(adr));
         }
         incrementPc(inst);
         break;
       }
     case Inst::ROR:
       {
-        u_int8_t carryBit = getCFlag() ? 0x80 : 0;
-        setCFlag((val & 0x1) > 0);
+        u_int8_t carryBit = flags.getCB();
+        flags.setCB(val & 0x1);
         val = val >> 1;
         val += (carryBit << 7);
         if (admode == Inst::ACCUMULATOR) {
           A = val;
-          setSFlag(A);
-          setZFlag(A);
+          flags.autoSetS(A);
+          flags.autoSetZ(A);
         } else {
           memory.write(val, adr);
-          setSFlag(memory.read(adr));
-          setZFlag(memory.read(adr));
+          flags.autoSetS(memory.read(adr));
+          flags.autoSetZ(memory.read(adr));
         }
         incrementPc(inst);
         break;
       }
     case Inst::RTI:
       {
-        popFlags();
+        memory.popFlags(flags);
         // TODO this might be only 1 byte
-        u_int16_t newAdr = pop();
+        u_int16_t newAdr = memory.pop();
         newAdr = newAdr << 8;
-        newAdr += pop();
+        newAdr += memory.pop();
         pc = newAdr;
         break;
       }
     case Inst::RTS:
       {
-        u_int16_t newAdr = pop();
+        u_int16_t newAdr = memory.pop();
         newAdr = newAdr << 8;
-        newAdr += pop();
+        newAdr += memory.pop();
         pc = newAdr + 1;
+        // TODO does this need flags
         break;
       }
     case Inst::SBC:
       {
-        u_int8_t borrow = getCFlag() ? 1 : 0;
+        u_int8_t borrow = flags.getCB();
         A = A - val - borrow;
 
         // TODO: this logic might not be right
@@ -604,10 +491,10 @@ void execute(Inst inst) {
         // TODO: this logic definitely not right
         u_int16_t notcarry = ((u_int16_t) A) - ((u_int16_t) val) - borrow;
 
-        setZFlag(A);
-        setSFlag(A);
-        setVFlag(notoverflow != A);
-        setCFlag(notcarry != (u_int8_t) A);
+        flags.autoSetZ(A);
+        flags.autoSetS(A);
+        flags.setV(notoverflow != A);
+        flags.setC(notcarry != (u_int8_t) A);
         incrementPc(inst);
         break;
       }
@@ -621,42 +508,42 @@ void execute(Inst inst) {
 
     case Inst::TXS:
       {
-        SP = X;
+        memory.SP = X;
         incrementPc(inst);
         break;
       }
 
     case Inst::TSX:
       {
-        X = SP;
+        X = memory.SP;
         incrementPc(inst);
         break;
       }
 
     case Inst::PHA:
       {
-        push(A);
+        memory.push(A);
         incrementPc(inst);
         break;
       }
 
     case Inst::PLA:
       {
-        A = pop();
+        A = memory.pop();
         incrementPc(inst);
         break;
       }
 
     case Inst::PHP:
       {
-        pushFlags();
+        memory.pushFlags(flags);
         incrementPc(inst);
         break;
       }
 
     case Inst::PLP:
       {
-        popFlags();
+        memory.popFlags(flags);
         incrementPc(inst);
         break;
       }
