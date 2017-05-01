@@ -30,7 +30,7 @@ class Inst {
   void incrementPc();
 
   public:
-    enum Type { ADC, AND, ASL, BIT, BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ, BRK, CMP, CPX, CPY, DEC, EOR, CLC, SEC, CLI, SEI, CLV, CLD, SED, INC, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, TAX, TXA, DEX, INX, TAY, TYA, DEY, INY};
+    enum Type { ADC, AND, ASL, BIT, BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ, BRK, CMP, CPX, CPY, DEC, EOR, CLC, SEC, CLI, SEI, CLV, CLD, SED, INC, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, TAX, TXA, DEX, INX, TAY, TYA, DEY, INY, ROL, ROR, RTI, RTS, SBC, STA, TXS, TSX, PHA, PLA, PHP, PLP, STX, STY};
     enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_X, INDEXED_ABSOLUTE, INDIRECT_Y, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
     void execute();
 
@@ -486,6 +486,101 @@ void Inst::execute() {
         incrementPc();
         break;
       }
+    case ROL:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+    case ROR:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+    case RTI:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+    case RTS:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+    case SBC:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case STA:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case TXS:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case TSX:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case PHA:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case PLA:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case PHP:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case PLP:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case STX:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+    case STY:
+      {
+        // TODO
+        incrementPc();
+        break;
+      }
+
+
     default:
       cout << "Invalid command\n";
       break;
@@ -825,6 +920,93 @@ Inst parseInstruction(int pos) {
       return Inst(Inst::DEY, Inst::NONE, pos, buffer);
     case 0xC8:
       return Inst(Inst::INY, Inst::NONE, pos, buffer);
+
+    case 0x2A:
+      return Inst(Inst::ROL, Inst::ACCUMULATOR, pos, buffer);
+    case 0x26:
+      return Inst(Inst::ROL, Inst::ZERO_PAGE, pos, buffer);
+    case 0x36:
+      return Inst(Inst::ROL, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x2E:
+      return Inst(Inst::ROL, Inst::ABSOLUTE, pos, buffer);
+    case 0x3E:
+      return Inst(Inst::ROL, Inst::ABSOLUTE_X, pos, buffer);
+
+    case 0x6A:
+      return Inst(Inst::ROR, Inst::ACCUMULATOR, pos, buffer);
+    case 0x66:
+      return Inst(Inst::ROR, Inst::ZERO_PAGE, pos, buffer);
+    case 0x76:
+      return Inst(Inst::ROR, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x6E:
+      return Inst(Inst::ROR, Inst::ABSOLUTE, pos, buffer);
+    case 0x7E:
+      return Inst(Inst::ROR, Inst::ABSOLUTE_X, pos, buffer);
+
+    case 0x40:
+      return Inst(Inst::RTI, Inst::NONE, pos, buffer);
+
+    case 0x60:
+      return Inst(Inst::RTS, Inst::NONE, pos, buffer);
+     
+    case 0xE9:
+      return Inst(Inst::SBC, Inst::IMMEDIATE, pos, buffer);
+    case 0xE5:
+      return Inst(Inst::SBC, Inst::ZERO_PAGE, pos, buffer);
+    case 0xF5:
+      return Inst(Inst::SBC, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0xED:
+      return Inst(Inst::SBC, Inst::ABSOLUTE, pos, buffer);
+    case 0xFD:
+      return Inst(Inst::SBC, Inst::ABSOLUTE_X, pos, buffer);
+    case 0xF9:
+      return Inst(Inst::SBC, Inst::ABSOLUTE_Y, pos, buffer);
+    case 0xE1:
+      return Inst(Inst::SBC, Inst::INDIRECT_X, pos, buffer);
+    case 0xF1:
+      return Inst(Inst::SBC, Inst::INDIRECT_Y, pos, buffer);
+
+    case 0x85:
+      return Inst(Inst::STA, Inst::ZERO_PAGE, pos, buffer);
+    case 0x95:
+      return Inst(Inst::STA, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x8D:
+      return Inst(Inst::STA, Inst::ABSOLUTE, pos, buffer);
+    case 0x9D:
+      return Inst(Inst::STA, Inst::ABSOLUTE_X, pos, buffer);
+    case 0x99:
+      return Inst(Inst::STA, Inst::ABSOLUTE_Y, pos, buffer);
+    case 0x81:
+      return Inst(Inst::STA, Inst::INDIRECT_X, pos, buffer);
+    case 0x91:
+      return Inst(Inst::STA, Inst::INDIRECT_Y, pos, buffer);
+
+    case 0x9A:
+      return Inst(Inst::TXS, Inst::NONE, pos, buffer);
+    case 0xBA:
+      return Inst(Inst::TSX, Inst::NONE, pos, buffer);
+    case 0x48:
+      return Inst(Inst::PHA, Inst::NONE, pos, buffer);
+    case 0x68:
+      return Inst(Inst::PLA, Inst::NONE, pos, buffer);
+    case 0x08:
+      return Inst(Inst::PHP, Inst::NONE, pos, buffer);
+    case 0x28:
+      return Inst(Inst::PLP, Inst::NONE, pos, buffer);
+
+    case 0x86:
+      return Inst(Inst::STX, Inst::ZERO_PAGE, pos, buffer);
+    case 0x96:
+      return Inst(Inst::STX, Inst::ZERO_PAGE_Y, pos, buffer);
+    case 0x8E:
+      return Inst(Inst::STX, Inst::ABSOLUTE, pos, buffer);
+
+    case 0x84:
+      return Inst(Inst::STX, Inst::ZERO_PAGE, pos, buffer);
+    case 0x94:
+      return Inst(Inst::STX, Inst::ZERO_PAGE_X, pos, buffer);
+    case 0x8C:
+      return Inst(Inst::STX, Inst::ABSOLUTE, pos, buffer);
 
     default:
       return Inst(Inst::NOP, Inst::NONE, pos, buffer);
