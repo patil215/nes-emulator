@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "nes.h"
+#include "inst.h"
 
 // ROM associated variables
-//unsigned char * prg;
-//unsigned char * chr;
 unsigned char * buffer;
-
+int Prg_Size;
+int Chr_Size;
 
 // Hardware associated variables
 // TODO: Might have to initialize variables
@@ -23,35 +23,6 @@ int8_t memory[0xF00800];
 
 using namespace std;
 
-
-class Inst {
-
-  void readVal();
-  void incrementPc();
-
-  public:
-    enum Type { ADC, AND, ASL, BIT, BPL, BMI, BVC, BVS, BCC, BCS, BNE, BEQ, BRK, CMP, CPX, CPY, DEC, EOR, CLC, SEC, CLI, SEI, CLV, CLD, SED, INC, JMP, JSR, LDA, LDX, LDY, LSR, NOP, ORA, TAX, TXA, DEX, INX, TAY, TYA, DEY, INY, ROL, ROR, RTI, RTS, SBC, STA, TXS, TSX, PHA, PLA, PHP, PLP, STX, STY};
-    enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_X, INDEXED_ABSOLUTE, INDIRECT_Y, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
-    void execute();
-
-    Inst (Type, Admode, int pos, unsigned char * buffer);
-
-    Type type;
-    Admode admode;
-    int pos;
-
-    uint16_t adr;
-    int8_t val;
-};
-
-
-Inst::Inst(Type type_t, Admode admode_t, int pos_t, unsigned char * buffer_t) {
-  type = type_t;
-  admode = admode_t;
-  pos = pos_t;
-  buffer = buffer_t;
-  readVal();
-}
 
 bool getCFlag() {
   return flags[0];
@@ -118,49 +89,48 @@ void setZFlag(int8_t result) {
 }
 
 
-    enum Admode {ABSOLUTE, ABSOLUTE_X, ABSOLUTE_Y, ACCUMULATOR, IMMEDIATE, INDIRECT, INDIRECT_X, INDEXED_ABSOLUTE, INDIRECT_Y, ZERO_PAGE_X, ZERO_PAGE_Y, NONE, RELATIVE, ZERO_PAGE};
-void Inst::incrementPc() {
-  switch (admode) {
-    case ABSOLUTE:
+void incrementPc(Inst inst) {
+  switch (inst.admode) {
+    case Inst::ABSOLUTE:
       pc += 3;
       break;
-    case ABSOLUTE_X:
+    case Inst::ABSOLUTE_X:
       pc += 3;
       break;
-    case ABSOLUTE_Y:
+    case Inst::ABSOLUTE_Y:
       pc += 3;
       break;
-    case ACCUMULATOR:
+    case Inst::ACCUMULATOR:
       pc += 1;
       break;
-    case IMMEDIATE:
+    case Inst::IMMEDIATE:
       pc += 2;
       break;
-    case INDIRECT:
+    case Inst::INDIRECT:
       pc += 3;
       break;
-    case INDIRECT_X:
+    case Inst::INDIRECT_X:
       pc += 2;
       break;
-    case INDEXED_ABSOLUTE:
+    case Inst::INDEXED_ABSOLUTE:
       pc += 3;
       break;
-    case INDIRECT_Y:
+    case Inst::INDIRECT_Y:
       pc += 2;
       break;
-    case ZERO_PAGE_X:
+    case Inst::ZERO_PAGE_X:
       pc += 2;
       break;
-    case ZERO_PAGE_Y:
+    case Inst::ZERO_PAGE_Y:
       pc += 2;
       break;
-    case NONE:
+    case Inst::NONE:
       pc += 1;
       break;
-    case RELATIVE:
+    case Inst::RELATIVE:
       break;
       pc += 2;
-    case ZERO_PAGE:
+    case Inst::ZERO_PAGE:
       pc += 2;
       break;
     default:
@@ -169,15 +139,74 @@ void Inst::incrementPc() {
   }
 }
 
+void writeMem(int8_t val, u_int16_t adr);
 void push(int8_t value) {
   SP--;
-  memory[SP] = value;
+  writeMem(value, SP);
 }
 
 int8_t pop() {
   int8_t value = memory[SP];
   SP++;
   return value;
+}
+
+void writeMem(int8_t val, u_int16_t adr) {
+  // Mirroring
+  if ((adr >= 0 && adr <= 0x7FF)) {
+    memory[adr] = val;
+    memory[adr + 0x800] = val;
+    memory[adr + 0x1000] = val;
+    memory[adr + 0x1800] = val;
+    return;
+  }
+  if ((adr >= 0x800 && adr <= 0xFFF)) {
+    memory[adr] = val;
+    memory[adr - 0x800] = val;
+    memory[adr + 0x800] = val;
+    memory[adr + 0x1000] = val;
+    return;
+  }
+  if ((adr >= 0x1000 && adr <= 0x17FF)) {
+    memory[adr] = val;
+    memory[adr - 0x1000] = val;
+    memory[adr - 0x800] = val;
+    memory[adr + 0x800] = val;
+    return;
+  }
+  if ((adr >= 0x1800 && adr <= 0x1FFF)) {
+    memory[adr] = val;
+    memory[adr - 0x1800] = val;
+    memory[adr - 0x1000] = val;
+    memory[adr - 0x800] = val;
+    return;
+  }
+  if ((adr >= 0x2000 && adr <= 0x3FFF)) {
+    for (int i = 0x2000; i <= 0x3FFF; i++) {
+      if ((i % 8) == (adr % 8)) {
+        memory[i] = val;
+      }
+    }
+    return;
+  }
+  if ((adr >= 0x8000 && adr <= 0xBFFF)) {
+    memory[adr] = val;
+    memory[adr + 0xC000] = val;
+    return;
+  }
+  if ((adr >= 0xC000 && adr <= 0xFFFF)) {
+    memory[adr] = val;
+    memory[adr - 0xC000] = val;
+    return;
+  }
+  memory[adr] = val;
+  // TODO single, ASIC, PPU, PRG rom mirroring
+}
+
+void setupMem() {
+  for (int i = 0; i < Prg_Size; i++) {
+    writeMem(buffer[i + 16], i + 0x8000);
+  }
 }
 
 void pushFlags() {
@@ -217,10 +246,12 @@ void popFlags() {
   setCFlag((f & 0x1) > 0);
 }
 
-void Inst::execute() {
-  // TODO memory mirroring / duplication
-  switch (type) {
-    case ADC:
+void execute(Inst inst) {
+  int8_t val = inst.val;
+  u_int16_t adr = inst.adr;
+  Inst::Admode admode = inst.admode;
+  switch (inst.type) {
+    case Inst::ADC:
     {
       u_int8_t carry = getCFlag() ? 1 : 0;
       // TODO: this logic might not be right
@@ -233,371 +264,371 @@ void Inst::execute() {
       setVFlag(notoverflow != A);
       setZFlag(A);
       setCFlag(notcarry != ((u_int8_t) A));
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case AND:
+    case Inst::AND:
     {
       A = A & val;
       setZFlag(A);
       setSFlag(A);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case ASL:
+    case Inst::ASL:
     {
       
       setCFlag(val & 0x80);
       // TODO is this actually an arithmetic shift
       val = val << 1;
-      if (admode == ACCUMULATOR) {
+      if (admode == Inst::ACCUMULATOR) {
         A = val;
         setSFlag(A);
         setZFlag(A);
       } else {
-        memory[adr] = val;
+        writeMem(val, adr);
         setSFlag(memory[adr]);
         setZFlag(memory[adr]);
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BIT:
+    case Inst::BIT:
     {
       // TODO Probably bug
       flags[7] = (0x80 & val) > 0;
       flags[6] = (0x40 & val) > 0;
       setZFlag(val & A);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BPL:
+    case Inst::BPL:
     {
       if (!getSFlag()) {
         pc += val;
       } 
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BMI:
+    case Inst::BMI:
     {
       if(getSFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BVC:
+    case Inst::BVC:
     {
       if(!getVFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BVS:
+    case Inst::BVS:
     {
       if(getVFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BCC:
+    case Inst::BCC:
     {
       if(!getCFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BCS:
+    case Inst::BCS:
     {
       if(getCFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BNE:
+    case Inst::BNE:
     {
       if(!getZFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BEQ:
+    case Inst::BEQ:
     {
       if(getZFlag()) {
         pc += val;
       }
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case BRK:
+    case Inst::BRK:
     {
       setBFlag(true);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CMP:
+    case Inst::CMP:
     {
       setCFlag(A >= val);
       setZFlag(A - val);
       setSFlag(A - val);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CPX:
+    case Inst::CPX:
     {
       setCFlag(X >= val);
       setZFlag(X - val);
       setSFlag(X - val);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CPY:
+    case Inst::CPY:
     {
       setCFlag(Y >= val);
       setZFlag(Y - val);
       setSFlag(Y - val);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case DEC:
+    case Inst::DEC:
     {
-      memory[adr]--;
+      writeMem(memory[adr] - 1, adr);
       setSFlag(memory[adr]);
       setZFlag(memory[adr]);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case EOR:
+    case Inst::EOR:
     {
       A = A ^ val;
       setSFlag(A);
       setZFlag(A);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CLC:
+    case Inst::CLC:
     {
       setCFlag(false);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case SEC:
+    case Inst::SEC:
     {
       setCFlag(true);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CLI:
+    case Inst::CLI:
     {
       setIFlag(false);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case SEI:
+    case Inst::SEI:
     {
       setIFlag(true);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CLV:
+    case Inst::CLV:
     {
       setVFlag(false);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case CLD:
+    case Inst::CLD:
     {
       setDFlag(false);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case SED:
+    case Inst::SED:
     {
       setDFlag(true);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case INC:
+    case Inst::INC:
     {
-      memory[adr]++;
+      writeMem(memory[adr] + 1, adr);
       setSFlag(memory[adr]);
       setZFlag(memory[adr]);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case JMP:
+    case Inst::JMP:
     {
       pc = adr;
       break;
     }
-    case JSR:
+    case Inst::JSR:
     {
       push((u_int8_t) (pc + 2));
       push((u_int8_t) ((pc + 2) >> 8));
       pc = adr;
       break;
     }
-    case LDA:
+    case Inst::LDA:
     {
       A = val;
       setSFlag(A);
       setZFlag(A);
-      incrementPc();
+      incrementPc(inst);
       break;
     }
-    case LDX:
+    case Inst::LDX:
       {
       X = val;
       setSFlag(X);
       setZFlag(X);
-      incrementPc();
+      incrementPc(inst);
       break;
       }
-    case LDY:
+    case Inst::LDY:
       {
       Y = val;
       setSFlag(Y);
       setZFlag(Y);
-      incrementPc();
+      incrementPc(inst);
       break;
       }
-    case LSR:
+    case Inst::LSR:
       {
         setCFlag((0x1 & val) > 0);
         // TODO is this actually a logical shift
         val = val >> 1;
-        if (admode == ACCUMULATOR) {
+        if (admode == Inst::ACCUMULATOR) {
           A = val;
           setSFlag(A);
           setZFlag(A);
         } else {
-          memory[adr] = val;
+          writeMem(val, adr);
           setSFlag(memory[adr]);
           setZFlag(memory[adr]);
         }
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case NOP:
+    case Inst::NOP:
       {
-      incrementPc();
+      incrementPc(inst);
       break;
       }
-    case ORA:
+    case Inst::ORA:
       {
         A = A | val;
         setSFlag(A);
         setZFlag(A);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case TAX:
+    case Inst::TAX:
       {
       X = A;
       setSFlag(X);
       setZFlag(X);
-      incrementPc();
+      incrementPc(inst);
       break;
       }
-    case TXA:
+    case Inst::TXA:
       {
         A = X;
         setSFlag(A);
         setZFlag(A);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case DEX:
+    case Inst::DEX:
       {
         X--;
         setSFlag(X);
         setZFlag(X);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case INX:
+    case Inst::INX:
       {
         X++;
         setSFlag(X);
         setZFlag(X);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case TAY:
+    case Inst::TAY:
       {
       Y = A;
       setSFlag(Y);
       setZFlag(Y);
-      incrementPc();
+      incrementPc(inst);
       break;
       }
-    case TYA:
+    case Inst::TYA:
       {
         A = Y;
         setSFlag(A);
         setZFlag(A);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case DEY:
+    case Inst::DEY:
       {
         Y--;
         setSFlag(Y);
         setZFlag(Y);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case INY:
+    case Inst::INY:
       {
         Y++;
         setSFlag(Y);
         setZFlag(Y);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case ROL:
+    case Inst::ROL:
       {
         u_int8_t carryBit = getCFlag() ? 1 : 0;
         setCFlag((val & 0x80) > 0);
         val = val << 1;
         val += carryBit;
-        if (admode == ACCUMULATOR) {
+        if (admode == Inst::ACCUMULATOR) {
           A = val;
           setSFlag(A);
           setZFlag(A);
         } else {
-          memory[adr] = val;
+          writeMem(val, adr);
           setSFlag(memory[adr]);
           setZFlag(memory[adr]);
         }
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case ROR:
+    case Inst::ROR:
       {
         u_int8_t carryBit = getCFlag() ? 0x80 : 0;
         setCFlag((val & 0x1) > 0);
         val = val >> 1;
         val += (carryBit << 7);
-        if (admode == ACCUMULATOR) {
+        if (admode == Inst::ACCUMULATOR) {
           A = val;
           setSFlag(A);
           setZFlag(A);
         } else {
-          memory[adr] = val;
+          writeMem(val, adr);
           setSFlag(memory[adr]);
           setZFlag(memory[adr]);
         }
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-    case RTI:
+    case Inst::RTI:
       {
         popFlags();
         // TODO this might be only 1 byte
@@ -607,7 +638,7 @@ void Inst::execute() {
         pc = newAdr;
         break;
       }
-    case RTS:
+    case Inst::RTS:
       {
         u_int16_t newAdr = pop();
         newAdr = newAdr << 8;
@@ -615,7 +646,7 @@ void Inst::execute() {
         pc = newAdr + 1;
         break;
       }
-    case SBC:
+    case Inst::SBC:
       {
         u_int8_t borrow = getCFlag() ? 1 : 0;
         A = A - val - borrow;
@@ -629,73 +660,73 @@ void Inst::execute() {
         setSFlag(A);
         setVFlag(notoverflow != A);
         setCFlag(notcarry != (u_int8_t) A);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case STA:
+    case Inst::STA:
       {
-        memory[adr] = A;
-        incrementPc();
+        writeMem(A, val);
+        incrementPc(inst);
         break;
       }
 
-    case TXS:
+    case Inst::TXS:
       {
         SP = X;
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case TSX:
+    case Inst::TSX:
       {
         X = SP;
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case PHA:
+    case Inst::PHA:
       {
         push(A);
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case PLA:
+    case Inst::PLA:
       {
         A = pop();
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case PHP:
+    case Inst::PHP:
       {
         pushFlags();
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case PLP:
+    case Inst::PLP:
       {
         popFlags();
-        incrementPc();
+        incrementPc(inst);
         break;
       }
 
-    case STX:
+    case Inst::STX:
       {
-        memory[adr] = X;
-        incrementPc();
+        writeMem(X, adr);
+        incrementPc(inst);
         break;
       }
 
-    case STY:
+    case Inst::STY:
       {
+        writeMem(Y, adr);
         memory[adr] = Y;
-        incrementPc();
+        incrementPc(inst);
         break;
       }
-
 
     default:
       cout << "Invalid command\n";
@@ -783,356 +814,12 @@ void Inst::readVal() {
   }
 }
 
-Inst parseInstruction(int pos) {
-  unsigned char code = buffer[pos];
-  switch (code) {
-
-    case 0x69:
-      return Inst(Inst::ADC, Inst::IMMEDIATE, pos, buffer);
-    case 0x65:
-      return Inst(Inst::ADC, Inst::ZERO_PAGE, pos, buffer);
-    case 0x75:
-      return Inst(Inst::ADC, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x6D:
-      return Inst(Inst::ADC, Inst::ABSOLUTE, pos, buffer);
-    case 0x7D:
-      return Inst(Inst::ADC, Inst::ABSOLUTE_X, pos, buffer);
-    case 0x79:
-      return Inst(Inst::ADC, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0x61:
-      return Inst(Inst::ADC, Inst::INDIRECT_X, pos, buffer);
-    case 0x71:
-      return Inst(Inst::ADC, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0x29:
-      return Inst(Inst::AND, Inst::IMMEDIATE, pos, buffer);
-    case 0x25:
-      return Inst(Inst::AND, Inst::ZERO_PAGE, pos, buffer);
-    case 0x35:
-      return Inst(Inst::AND, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x2D:
-      return Inst(Inst::AND, Inst::ABSOLUTE, pos, buffer);
-    case 0x3D:
-      return Inst(Inst::AND, Inst::ABSOLUTE_X, pos, buffer);
-    case 0x39:
-      return Inst(Inst::AND, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0x21:
-      return Inst(Inst::AND, Inst::INDIRECT_X, pos, buffer);
-    case 0x31:
-      return Inst(Inst::AND, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0x0A:
-      return Inst(Inst::ASL, Inst::ACCUMULATOR, pos, buffer);
-    case 0x06:
-      return Inst(Inst::ASL, Inst::ZERO_PAGE, pos, buffer);
-    case 0x16:
-      return Inst(Inst::ASL, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x0E:
-      return Inst(Inst::ASL, Inst::ABSOLUTE, pos, buffer);
-    case 0x1E:
-      return Inst(Inst::ASL, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0x24:
-      return Inst(Inst::BIT, Inst::ZERO_PAGE, pos, buffer);
-    case 0x2C:
-      return Inst(Inst::BIT, Inst::ABSOLUTE, pos, buffer);
-
-    case 0x10:
-      return Inst(Inst::BPL, Inst::NONE, pos, buffer);
-    case 0x30:
-      return Inst(Inst::BMI, Inst::NONE, pos, buffer);
-    case 0x50:
-      return Inst(Inst::BVC, Inst::NONE, pos, buffer);
-    case 0x70:
-      return Inst(Inst::BVS, Inst::NONE, pos, buffer);
-    case 0x90:
-      return Inst(Inst::BCC, Inst::NONE, pos, buffer);
-    case 0xB0:
-      return Inst(Inst::BCS, Inst::NONE, pos, buffer);
-    case 0xD0:
-      return Inst(Inst::BNE, Inst::NONE, pos, buffer);
-    case 0xF0:
-      return Inst(Inst::BEQ, Inst::NONE, pos, buffer);
-
-    case 0x00:
-      return Inst(Inst::BRK, Inst::NONE, pos, buffer);
-
-    case 0xC9:
-      return Inst(Inst::CMP, Inst::IMMEDIATE, pos, buffer);
-    case 0xC5:
-      return Inst(Inst::CMP, Inst::ZERO_PAGE, pos, buffer);
-    case 0xD5:
-      return Inst(Inst::CMP, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0xCD:
-      return Inst(Inst::CMP, Inst::ABSOLUTE, pos, buffer);
-    case 0xDD:
-      return Inst(Inst::CMP, Inst::ABSOLUTE_X, pos, buffer);
-    case 0xD9:
-      return Inst(Inst::CMP, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0xC1:
-      return Inst(Inst::CMP, Inst::INDIRECT_X, pos, buffer);
-    case 0xD1:
-      return Inst(Inst::CMP, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0xE0:
-      return Inst(Inst::CPX, Inst::IMMEDIATE, pos, buffer);
-    case 0xE4:
-      return Inst(Inst::CPX, Inst::ZERO_PAGE, pos, buffer);
-    case 0xEC:
-      return Inst(Inst::CPX, Inst::ABSOLUTE, pos, buffer);
-
-    case 0xC0:
-      return Inst(Inst::CPY, Inst::IMMEDIATE, pos, buffer);
-    case 0xC4:
-      return Inst(Inst::CPY, Inst::ZERO_PAGE, pos, buffer);
-    case 0xCC:
-      return Inst(Inst::CPY, Inst::ABSOLUTE, pos, buffer);
-
-
-    case 0xC6:
-      return Inst(Inst::DEC, Inst::ZERO_PAGE, pos, buffer);
-    case 0xD6:
-      return Inst(Inst::DEC, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0xCE:
-      return Inst(Inst::DEC, Inst::ABSOLUTE, pos, buffer);
-    case 0xDE:
-      return Inst(Inst::DEC, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0x49:
-      return Inst(Inst::EOR, Inst::IMMEDIATE, pos, buffer);
-    case 0x45:
-      return Inst(Inst::EOR, Inst::ZERO_PAGE, pos, buffer);
-    case 0x55:
-      return Inst(Inst::EOR, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x4D:
-      return Inst(Inst::EOR, Inst::ABSOLUTE, pos, buffer);
-    case 0x5D:
-      return Inst(Inst::EOR, Inst::ABSOLUTE_X, pos, buffer);
-    case 0x59:
-      return Inst(Inst::EOR, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0x41:
-      return Inst(Inst::EOR, Inst::INDIRECT_X, pos, buffer);
-    case 0x51:
-      return Inst(Inst::EOR, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0x18:
-      return Inst(Inst::CLC, Inst::NONE, pos, buffer);
-    case 0x38:
-      return Inst(Inst::SEC, Inst::NONE, pos, buffer);
-    case 0x58:
-      return Inst(Inst::CLI, Inst::NONE, pos, buffer);
-    case 0x78:
-      return Inst(Inst::SEI, Inst::NONE, pos, buffer);
-    case 0xB8:
-      return Inst(Inst::CLV, Inst::NONE, pos, buffer);
-    case 0xD8:
-      return Inst(Inst::CLD, Inst::NONE, pos, buffer);
-    case 0xF8:
-      return Inst(Inst::SED, Inst::NONE, pos, buffer);
-
-
-    case 0xE6:
-      return Inst(Inst::INC, Inst::ZERO_PAGE, pos, buffer);
-    case 0xF6:
-      return Inst(Inst::INC, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0xEE:
-      return Inst(Inst::INC, Inst::ABSOLUTE, pos, buffer);
-    case 0xFE:
-      return Inst(Inst::INC, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0x4C:
-      return Inst(Inst::JMP, Inst::ABSOLUTE, pos, buffer);
-    case 0x6C:
-      return Inst(Inst::JMP, Inst::INDIRECT, pos, buffer);
-
-    case 0x20:
-      return Inst(Inst::JSR, Inst::ABSOLUTE, pos, buffer);
-
-    case 0xA9:
-      return Inst(Inst::LDA, Inst::IMMEDIATE, pos, buffer);
-    case 0xA5:
-      return Inst(Inst::LDA, Inst::ZERO_PAGE, pos, buffer);
-    case 0xB5:
-      return Inst(Inst::LDA, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0xAD:
-      return Inst(Inst::LDA, Inst::ABSOLUTE, pos, buffer);
-    case 0xBD:
-      return Inst(Inst::LDA, Inst::ABSOLUTE_X, pos, buffer);
-    case 0xB9:
-      return Inst(Inst::LDA, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0xA1:
-      return Inst(Inst::LDA, Inst::INDIRECT_X, pos, buffer);
-    case 0xB1:
-      return Inst(Inst::LDA, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0xA2:
-      // TODO: does this load the value or memory[value]?
-      return Inst(Inst::LDX, Inst::IMMEDIATE, pos, buffer);
-    case 0xA6:
-      return Inst(Inst::LDX, Inst::ZERO_PAGE, pos, buffer);
-    case 0xB6:
-      return Inst(Inst::LDX, Inst::ZERO_PAGE_Y, pos, buffer);
-    case 0xAE:
-      return Inst(Inst::LDX, Inst::ABSOLUTE, pos, buffer);
-    case 0xBE:
-      return Inst(Inst::LDX, Inst::ABSOLUTE_Y, pos, buffer);
-
-    case 0xA0:
-      return Inst(Inst::LDY, Inst::IMMEDIATE, pos, buffer);
-    case 0xA4:
-      return Inst(Inst::LDY, Inst::ZERO_PAGE, pos, buffer);
-    case 0xB4:
-      return Inst(Inst::LDY, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0xAC:
-      return Inst(Inst::LDY, Inst::ABSOLUTE, pos, buffer);
-    case 0xBC:
-      return Inst(Inst::LDY, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0x4A:
-      return Inst(Inst::LSR, Inst::ACCUMULATOR, pos, buffer);
-    case 0x46:
-      return Inst(Inst::LSR, Inst::ZERO_PAGE, pos, buffer);
-    case 0x56:
-      return Inst(Inst::LSR, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x4E:
-      return Inst(Inst::LSR, Inst::ABSOLUTE, pos, buffer);
-    case 0x5E:
-      return Inst(Inst::LSR, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0xEA:
-      return Inst(Inst::NOP, Inst::NONE, pos, buffer);
-
-    case 0x09:
-      return Inst(Inst::ORA, Inst::IMMEDIATE, pos, buffer);
-    case 0x05:
-      return Inst(Inst::ORA, Inst::ZERO_PAGE, pos, buffer);
-    case 0x15:
-      return Inst(Inst::ORA, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x0D:
-      return Inst(Inst::ORA, Inst::ABSOLUTE, pos, buffer);
-    case 0x1D:
-      return Inst(Inst::ORA, Inst::ABSOLUTE_X, pos, buffer);
-    case 0x19:
-      return Inst(Inst::ORA, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0x01:
-      return Inst(Inst::ORA, Inst::INDIRECT_X, pos, buffer);
-    case 0x11:
-      return Inst(Inst::ORA, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0xAA:
-      return Inst(Inst::TAX, Inst::NONE, pos, buffer);
-    case 0x8A:
-      return Inst(Inst::TXA, Inst::NONE, pos, buffer);
-    case 0xCA:
-      return Inst(Inst::DEX, Inst::NONE, pos, buffer);
-    case 0xE8:
-      return Inst(Inst::INX, Inst::NONE, pos, buffer);
-    case 0xA8:
-      return Inst(Inst::TAY, Inst::NONE, pos, buffer);
-    case 0x98:
-      return Inst(Inst::TYA, Inst::NONE, pos, buffer);
-    case 0x88:
-      return Inst(Inst::DEY, Inst::NONE, pos, buffer);
-    case 0xC8:
-      return Inst(Inst::INY, Inst::NONE, pos, buffer);
-
-    case 0x2A:
-      return Inst(Inst::ROL, Inst::ACCUMULATOR, pos, buffer);
-    case 0x26:
-      return Inst(Inst::ROL, Inst::ZERO_PAGE, pos, buffer);
-    case 0x36:
-      return Inst(Inst::ROL, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x2E:
-      return Inst(Inst::ROL, Inst::ABSOLUTE, pos, buffer);
-    case 0x3E:
-      return Inst(Inst::ROL, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0x6A:
-      return Inst(Inst::ROR, Inst::ACCUMULATOR, pos, buffer);
-    case 0x66:
-      return Inst(Inst::ROR, Inst::ZERO_PAGE, pos, buffer);
-    case 0x76:
-      return Inst(Inst::ROR, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x6E:
-      return Inst(Inst::ROR, Inst::ABSOLUTE, pos, buffer);
-    case 0x7E:
-      return Inst(Inst::ROR, Inst::ABSOLUTE_X, pos, buffer);
-
-    case 0x40:
-      return Inst(Inst::RTI, Inst::NONE, pos, buffer);
-
-    case 0x60:
-      return Inst(Inst::RTS, Inst::NONE, pos, buffer);
-     
-    case 0xE9:
-      return Inst(Inst::SBC, Inst::IMMEDIATE, pos, buffer);
-    case 0xE5:
-      return Inst(Inst::SBC, Inst::ZERO_PAGE, pos, buffer);
-    case 0xF5:
-      return Inst(Inst::SBC, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0xED:
-      return Inst(Inst::SBC, Inst::ABSOLUTE, pos, buffer);
-    case 0xFD:
-      return Inst(Inst::SBC, Inst::ABSOLUTE_X, pos, buffer);
-    case 0xF9:
-      return Inst(Inst::SBC, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0xE1:
-      return Inst(Inst::SBC, Inst::INDIRECT_X, pos, buffer);
-    case 0xF1:
-      return Inst(Inst::SBC, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0x85:
-      return Inst(Inst::STA, Inst::ZERO_PAGE, pos, buffer);
-    case 0x95:
-      return Inst(Inst::STA, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x8D:
-      return Inst(Inst::STA, Inst::ABSOLUTE, pos, buffer);
-    case 0x9D:
-      return Inst(Inst::STA, Inst::ABSOLUTE_X, pos, buffer);
-    case 0x99:
-      return Inst(Inst::STA, Inst::ABSOLUTE_Y, pos, buffer);
-    case 0x81:
-      return Inst(Inst::STA, Inst::INDIRECT_X, pos, buffer);
-    case 0x91:
-      return Inst(Inst::STA, Inst::INDIRECT_Y, pos, buffer);
-
-    case 0x9A:
-      return Inst(Inst::TXS, Inst::NONE, pos, buffer);
-    case 0xBA:
-      return Inst(Inst::TSX, Inst::NONE, pos, buffer);
-    case 0x48:
-      return Inst(Inst::PHA, Inst::NONE, pos, buffer);
-    case 0x68:
-      return Inst(Inst::PLA, Inst::NONE, pos, buffer);
-    case 0x08:
-      return Inst(Inst::PHP, Inst::NONE, pos, buffer);
-    case 0x28:
-      return Inst(Inst::PLP, Inst::NONE, pos, buffer);
-
-    case 0x86:
-      return Inst(Inst::STX, Inst::ZERO_PAGE, pos, buffer);
-    case 0x96:
-      return Inst(Inst::STX, Inst::ZERO_PAGE_Y, pos, buffer);
-    case 0x8E:
-      return Inst(Inst::STX, Inst::ABSOLUTE, pos, buffer);
-
-    case 0x84:
-      return Inst(Inst::STX, Inst::ZERO_PAGE, pos, buffer);
-    case 0x94:
-      return Inst(Inst::STX, Inst::ZERO_PAGE_X, pos, buffer);
-    case 0x8C:
-      return Inst(Inst::STX, Inst::ABSOLUTE, pos, buffer);
-
-    default:
-      return Inst(Inst::NOP, Inst::NONE, pos, buffer);
-  }
-}
 
 
 void emulate() {
-  int numToRun = 8;
+  int numToRun = 100;
   for(int i = 0; i < numToRun; i++) {
-    Inst inst = parseInstruction(pc);
+    Inst inst = parseInstruction(pc, buffer);
 
     if (inst.type == Inst::JSR && inst.admode == Inst::ABSOLUTE) {
       cout << "doing absolute jump to address " << inst.adr <<  "\n";
@@ -1158,7 +845,9 @@ void emulate() {
       cout << "no op " << "\n";
     }
 
-    inst.execute();
+    cout << "PC: " << hex << pc << "\n";
+
+    execute(inst);
 
   }
 }
@@ -1179,8 +868,8 @@ int main(int argc, char * argv[]) {
   Nes_Hdr * header = (Nes_Hdr *) (buffer);
 
   // Convert sizes to # bytes
-  int Prg_Size = header->Prg_Size * 16384;
-  int Chr_Size = header->Chr_Size * 8192;
+  Prg_Size = header->Prg_Size * 16384;
+  Chr_Size = header->Chr_Size * 8192;
 
 
   /*// TODO: Account for trainer
@@ -1196,6 +885,7 @@ int main(int argc, char * argv[]) {
   }*/
 
   pc = 16;
+  setupMem();
   emulate();
 }
 
