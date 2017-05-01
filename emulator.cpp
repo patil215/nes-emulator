@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include "nes.h"
 #include "inst.h"
+#include "memory.h"
 
 // ROM associated variables
 unsigned char * buffer;
@@ -18,7 +19,7 @@ int8_t A;
 int SP = 0x1FF;
 bool flags[8];
 // TODO load program into memory, account for PRG-ROM, SRAM, Expansion ROM, I/O Registers
-int8_t memory[0xF00800];
+Memory memory;
 
 
 using namespace std;
@@ -139,73 +140,20 @@ void incrementPc(Inst inst) {
   }
 }
 
-void writeMem(int8_t val, u_int16_t adr);
 void push(int8_t value) {
   SP--;
-  writeMem(value, SP);
+  memory.write(value, SP);
 }
 
 int8_t pop() {
-  int8_t value = memory[SP];
+  int8_t value = memory.read(SP);
   SP++;
   return value;
 }
 
-void writeMem(int8_t val, u_int16_t adr) {
-  // Mirroring
-  if ((adr >= 0 && adr <= 0x7FF)) {
-    memory[adr] = val;
-    memory[adr + 0x800] = val;
-    memory[adr + 0x1000] = val;
-    memory[adr + 0x1800] = val;
-    return;
-  }
-  if ((adr >= 0x800 && adr <= 0xFFF)) {
-    memory[adr] = val;
-    memory[adr - 0x800] = val;
-    memory[adr + 0x800] = val;
-    memory[adr + 0x1000] = val;
-    return;
-  }
-  if ((adr >= 0x1000 && adr <= 0x17FF)) {
-    memory[adr] = val;
-    memory[adr - 0x1000] = val;
-    memory[adr - 0x800] = val;
-    memory[adr + 0x800] = val;
-    return;
-  }
-  if ((adr >= 0x1800 && adr <= 0x1FFF)) {
-    memory[adr] = val;
-    memory[adr - 0x1800] = val;
-    memory[adr - 0x1000] = val;
-    memory[adr - 0x800] = val;
-    return;
-  }
-  if ((adr >= 0x2000 && adr <= 0x3FFF)) {
-    for (int i = 0x2000; i <= 0x3FFF; i++) {
-      if ((i % 8) == (adr % 8)) {
-        memory[i] = val;
-      }
-    }
-    return;
-  }
-  if ((adr >= 0x8000 && adr <= 0xBFFF)) {
-    memory[adr] = val;
-    memory[adr + 0xC000] = val;
-    return;
-  }
-  if ((adr >= 0xC000 && adr <= 0xFFFF)) {
-    memory[adr] = val;
-    memory[adr - 0xC000] = val;
-    return;
-  }
-  memory[adr] = val;
-  // TODO single, ASIC, PPU, PRG rom mirroring
-}
-
 void setupMem() {
   for (int i = 0; i < Prg_Size; i++) {
-    writeMem(buffer[i + 16], i + 0x8000);
+    memory.write(buffer[i + 16], i + 0x8000);
   }
 }
 
@@ -286,9 +234,9 @@ void execute(Inst inst) {
         setSFlag(A);
         setZFlag(A);
       } else {
-        writeMem(val, adr);
-        setSFlag(memory[adr]);
-        setZFlag(memory[adr]);
+        memory.write(val, adr);
+        setSFlag(memory.read(adr));
+        setZFlag(memory.read(adr));
       }
       incrementPc(inst);
       break;
@@ -398,9 +346,9 @@ void execute(Inst inst) {
     }
     case Inst::DEC:
     {
-      writeMem(memory[adr] - 1, adr);
-      setSFlag(memory[adr]);
-      setZFlag(memory[adr]);
+      memory.write(memory.read(adr) - 1, adr);
+      setSFlag(memory.read(adr));
+      setZFlag(memory.read(adr));
       incrementPc(inst);
       break;
     }
@@ -456,9 +404,9 @@ void execute(Inst inst) {
     }
     case Inst::INC:
     {
-      writeMem(memory[adr] + 1, adr);
-      setSFlag(memory[adr]);
-      setZFlag(memory[adr]);
+      memory.write(memory.read(adr) + 1, adr);
+      setSFlag(memory.read(adr));
+      setZFlag(memory.read(adr));
       incrementPc(inst);
       break;
     }
@@ -508,9 +456,9 @@ void execute(Inst inst) {
           setSFlag(A);
           setZFlag(A);
         } else {
-          writeMem(val, adr);
-          setSFlag(memory[adr]);
-          setZFlag(memory[adr]);
+          memory.write(val, adr);
+          setSFlag(memory.read(adr));
+          setZFlag(memory.read(adr));
         }
         incrementPc(inst);
         break;
@@ -603,9 +551,9 @@ void execute(Inst inst) {
           setSFlag(A);
           setZFlag(A);
         } else {
-          writeMem(val, adr);
-          setSFlag(memory[adr]);
-          setZFlag(memory[adr]);
+          memory.write(val, adr);
+          setSFlag(memory.read(adr));
+          setZFlag(memory.read(adr));
         }
         incrementPc(inst);
         break;
@@ -621,9 +569,9 @@ void execute(Inst inst) {
           setSFlag(A);
           setZFlag(A);
         } else {
-          writeMem(val, adr);
-          setSFlag(memory[adr]);
-          setZFlag(memory[adr]);
+          memory.write(val, adr);
+          setSFlag(memory.read(adr));
+          setZFlag(memory.read(adr));
         }
         incrementPc(inst);
         break;
@@ -666,7 +614,7 @@ void execute(Inst inst) {
 
     case Inst::STA:
       {
-        writeMem(A, val);
+        memory.write(A, val);
         incrementPc(inst);
         break;
       }
@@ -715,15 +663,14 @@ void execute(Inst inst) {
 
     case Inst::STX:
       {
-        writeMem(X, adr);
+        memory.write(X, adr);
         incrementPc(inst);
         break;
       }
 
     case Inst::STY:
       {
-        writeMem(Y, adr);
-        memory[adr] = Y;
+        memory.write(Y, adr);
         incrementPc(inst);
         break;
       }
@@ -741,7 +688,7 @@ void Inst::readVal() {
       adr = buffer[pos + 2];
       adr = adr << 8;
       adr += buffer[pos + 1];
-      val = memory[adr];
+      val = memory.read(adr);
       break;
     case ACCUMULATOR:
       val = A;
@@ -754,31 +701,31 @@ void Inst::readVal() {
       adr = adr << 8;
       adr += buffer[pos + 1];
       adr += X;
-      val = memory[adr];
+      val = memory.read(adr);
       break;
     case ABSOLUTE_Y:
       adr = buffer[pos + 2];
       adr = adr << 8;
       adr += buffer[pos + 1];
       adr += Y;
-      val = memory[adr];
+      val = memory.read(adr);
       break;
     case ZERO_PAGE_X:
       adr = ((int8_t) buffer[pos + 1]) + X;
-      val = memory[adr];
+      val = memory.read(adr);
       break;
     case ZERO_PAGE_Y:
       adr = ((int8_t) buffer[pos + 1]) + Y;
-      val = memory[adr];
+      val = memory.read(adr);
       break;
     case INDIRECT_X:
       {
         int8_t op = buffer[pos + 1];
         op += X;
-        adr = memory[op + 1];
+        adr = memory.read(op + 1);
         adr = adr << 8;
-        adr += memory[op];
-        val = memory[adr];
+        adr += memory.read(op);
+        val = memory.read(adr);
         break;
       }
     case INDIRECT:
@@ -786,20 +733,20 @@ void Inst::readVal() {
         u_int16_t address = buffer[pos + 2];
         address = address << 8;
         address += buffer[pos + 1];
-        adr = memory[address + 1];
+        adr = memory.read(address + 1);
         adr = adr << 8;
-        adr += memory[address];
-        val = memory[adr];
+        adr += memory.read(address);
+        val = memory.read(adr);
         break;
       }
     case INDIRECT_Y:
       {
         int8_t op = buffer[pos + 1];
-        adr = memory[op + 1];
+        adr = memory.read(op + 1);
         adr = adr << 8;
-        adr += memory[op];
+        adr += memory.read(op);
         adr += Y;
-        val = memory[adr];
+        val = memory.read(adr);
         break;
       }
     case RELATIVE:
@@ -807,7 +754,7 @@ void Inst::readVal() {
       break;
     case ZERO_PAGE:
       adr = buffer[pos + 1];
-      val = memory[adr];
+      val = memory.read(adr);
       break;
     default:
       break;
