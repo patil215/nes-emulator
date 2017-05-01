@@ -170,8 +170,51 @@ void Inst::incrementPc() {
 }
 
 void push(int8_t value) {
-  memory[SP] = value;
   SP--;
+  memory[SP] = value;
+}
+
+int8_t pop() {
+  int8_t value = memory[SP];
+  SP++;
+  return value;
+}
+
+void pushFlags() {
+  u_int8_t f = 0;
+  f += (getSFlag() ? 1 : 0);
+  f = f << 1;
+  f += (getVFlag() ? 1 : 0);
+  f = f << 1;
+  f = f << 1;
+  f += (getBFlag() ? 1 : 0);
+  f = f << 1;
+  f += (getDFlag() ? 1 : 0);
+  f = f << 1;
+  f += (getIFlag() ? 1 : 0);
+  f = f << 1;
+  f += (getZFlag() ? 1 : 0);
+  f = f << 1;
+  f += (getCFlag() ? 1 : 0);
+}
+
+void popFlags() {
+  u_int8_t f = pop();
+  if ((f & 0x80) > 0) {
+    setSFlag(-1);
+  } else {
+    setSFlag(1);
+  }
+  setVFlag((f & 0x40) > 0);
+  setBFlag((f & 0x10) > 0);
+  setDFlag((f & 0x8) > 0);
+  setIFlag((f & 0x4) > 0);
+  if ((f & 0x2) > 0) {
+    setZFlag(0);
+  } else {
+    setZFlag(1);
+  }
+  setCFlag((f & 0x1) > 0);
 }
 
 void Inst::execute() {
@@ -310,7 +353,9 @@ void Inst::execute() {
     }
     case DEC:
     {
-      // TODO
+      memory[adr]--;
+      setSFlag(memory[adr]);
+      setZFlag(memory[adr]);
       incrementPc();
       break;
     }
@@ -364,7 +409,9 @@ void Inst::execute() {
     }
     case INC:
     {
-      // TODO
+      memory[adr]++;
+      setSFlag(memory[adr]);
+      setZFlag(memory[adr]);
       incrementPc();
       break;
     }
@@ -375,7 +422,8 @@ void Inst::execute() {
     }
     case JSR:
     {
-      push(pc + 2);
+      push((u_int8_t) (pc + 2));
+      push((u_int8_t) ((pc + 2) >> 8));
       pc = adr;
       break;
     }
@@ -488,26 +536,46 @@ void Inst::execute() {
       }
     case ROL:
       {
-        // TODO
+        // TODO special case for accumulator
+        u_int8_t carryBit = getCFlag() ? 1 : 0;
+        setCFlag((val & 0x80) > 0);
+        val = val << 1;
+        val += carryBit;
+        memory[adr] = val;
+        setSFlag(memory[adr]);
+        setZFlag(memory[adr]);
         incrementPc();
         break;
       }
     case ROR:
       {
-        // TODO
+        // TODO special case for accumulator
+        u_int8_t carryBit = getCFlag() ? 0x80 : 0;
+        setCFlag((val & 0x1) > 0);
+        val = val >> 1;
+        val += (carryBit << 7);
+        memory[adr] = val;
+        setSFlag(memory[adr]);
+        setZFlag(memory[adr]);
         incrementPc();
         break;
       }
     case RTI:
       {
-        // TODO
-        incrementPc();
+        popFlags();
+        // TODO this might be only 1 byte
+        u_int16_t newAdr = pop();
+        newAdr = newAdr << 8;
+        newAdr += pop();
+        pc = newAdr;
         break;
       }
     case RTS:
       {
-        // TODO
-        incrementPc();
+        u_int16_t newAdr = pop();
+        newAdr = newAdr << 8;
+        newAdr += pop();
+        pc = newAdr + 1;
         break;
       }
     case SBC:
@@ -519,63 +587,63 @@ void Inst::execute() {
 
     case STA:
       {
-        // TODO
+        memory[adr] = A;
         incrementPc();
         break;
       }
 
     case TXS:
       {
-        // TODO
+        SP = X;
         incrementPc();
         break;
       }
 
     case TSX:
       {
-        // TODO
+        X = SP;
         incrementPc();
         break;
       }
 
     case PHA:
       {
-        // TODO
+        push(A);
         incrementPc();
         break;
       }
 
     case PLA:
       {
-        // TODO
+        A = pop();
         incrementPc();
         break;
       }
 
     case PHP:
       {
-        // TODO
+        pushFlags();
         incrementPc();
         break;
       }
 
     case PLP:
       {
-        // TODO
+        popFlags();
         incrementPc();
         break;
       }
 
     case STX:
       {
-        // TODO
+        memory[adr] = X;
         incrementPc();
         break;
       }
 
     case STY:
       {
-        // TODO
+        memory[adr] = Y;
         incrementPc();
         break;
       }
