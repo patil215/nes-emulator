@@ -218,14 +218,17 @@ void popFlags() {
 }
 
 void Inst::execute() {
+  // TODO memory mirroring / duplication
   switch (type) {
     case ADC:
     {
+      u_int8_t carry = getCFlag() ? 1 : 0;
       // TODO: this logic might not be right
-      int16_t notoverflow = ((int16_t) A) + ((int16_t) val) + flags[0];
-      u_int16_t notcarry = ((u_int16_t) A) + ((u_int16_t) val) + flags[0];
+      int16_t notoverflow = ((int16_t) A) + ((int16_t) val) + carry;
+      // TODO: this logic definitely not right
+      u_int16_t notcarry = ((u_int16_t) A) + ((u_int16_t) val) + carry;
 
-      A = A + val + flags[0];
+      A = A + val + carry;
       setSFlag(A);
       setVFlag(notoverflow != A);
       setZFlag(A);
@@ -243,15 +246,25 @@ void Inst::execute() {
     }
     case ASL:
     {
-      // TODO this one is messed up because it directly shifts memory
-      //setCFlag(A & 0x80);
-      //A = A << 1;
+      
+      setCFlag(val & 0x80);
+      // TODO is this actually an arithmetic shift
+      val = val << 1;
+      if (admode == ACCUMULATOR) {
+        A = val;
+        setSFlag(A);
+        setZFlag(A);
+      } else {
+        memory[adr] = val;
+        setSFlag(memory[adr]);
+        setZFlag(memory[adr]);
+      }
       incrementPc();
       break;
     }
     case BIT:
     {
-      // Probably bug
+      // TODO Probably bug
       flags[7] = (0x80 & val) > 0;
       flags[6] = (0x40 & val) > 0;
       setZFlag(val & A);
@@ -264,6 +277,7 @@ void Inst::execute() {
         pc += val;
       } 
       incrementPc();
+      break;
     }
     case BMI:
     {
@@ -361,7 +375,9 @@ void Inst::execute() {
     }
     case EOR:
     {
-      // TODO
+      A = A ^ val;
+      setSFlag(A);
+      setZFlag(A);
       incrementPc();
       break;
     }
@@ -453,7 +469,18 @@ void Inst::execute() {
       }
     case LSR:
       {
-        // TODO
+        setCFlag((0x1 & val) > 0);
+        // TODO is this actually a logical shift
+        val = val >> 1;
+        if (admode == ACCUMULATOR) {
+          A = val;
+          setSFlag(A);
+          setZFlag(A);
+        } else {
+          memory[adr] = val;
+          setSFlag(memory[adr]);
+          setZFlag(memory[adr]);
+        }
         incrementPc();
         break;
       }
@@ -536,27 +563,37 @@ void Inst::execute() {
       }
     case ROL:
       {
-        // TODO special case for accumulator
         u_int8_t carryBit = getCFlag() ? 1 : 0;
         setCFlag((val & 0x80) > 0);
         val = val << 1;
         val += carryBit;
-        memory[adr] = val;
-        setSFlag(memory[adr]);
-        setZFlag(memory[adr]);
+        if (admode == ACCUMULATOR) {
+          A = val;
+          setSFlag(A);
+          setZFlag(A);
+        } else {
+          memory[adr] = val;
+          setSFlag(memory[adr]);
+          setZFlag(memory[adr]);
+        }
         incrementPc();
         break;
       }
     case ROR:
       {
-        // TODO special case for accumulator
         u_int8_t carryBit = getCFlag() ? 0x80 : 0;
         setCFlag((val & 0x1) > 0);
         val = val >> 1;
         val += (carryBit << 7);
-        memory[adr] = val;
-        setSFlag(memory[adr]);
-        setZFlag(memory[adr]);
+        if (admode == ACCUMULATOR) {
+          A = val;
+          setSFlag(A);
+          setZFlag(A);
+        } else {
+          memory[adr] = val;
+          setSFlag(memory[adr]);
+          setZFlag(memory[adr]);
+        }
         incrementPc();
         break;
       }
@@ -580,7 +617,18 @@ void Inst::execute() {
       }
     case SBC:
       {
-        // TODO
+        u_int8_t borrow = getCFlag() ? 1 : 0;
+        A = A - val - borrow;
+
+        // TODO: this logic might not be right
+        int16_t notoverflow = ((int16_t) A) - ((int16_t) val) - borrow;
+        // TODO: this logic definitely not right
+        u_int16_t notcarry = ((u_int16_t) A) - ((u_int16_t) val) - borrow;
+
+        setZFlag(A);
+        setSFlag(A);
+        setVFlag(notoverflow != A);
+        setCFlag(notcarry != (u_int8_t) A);
         incrementPc();
         break;
       }
@@ -724,7 +772,6 @@ void Inst::readVal() {
         break;
       }
     case RELATIVE:
-      // TODO this might need a special case
       val = buffer[pos + 1];
       break;
     case ZERO_PAGE:
