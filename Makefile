@@ -1,8 +1,8 @@
 all:
-	g++ emulator.cpp -o emu
+	g++ memory.cpp inst.cpp flags.cpp emulator.cpp -o emu
 
 clean:
 	rm emu
 
 run:
-	./emu donkey-kong.nes
+	./emu duck-hunt.nes

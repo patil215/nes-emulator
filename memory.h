@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include "flags.h"
 
+#ifndef _MEMORY_H_
+#define _MEMORY_H_
+
 class Memory {
 
 	private:
@@ -14,4 +17,7 @@ class Memory {
 		int8_t pop();
 		void pushFlags(Flags flags);
 		void popFlags(Flags & flags);
+		void setup(unsigned char * prg, int Prg_Size);
 };
+
+#endif

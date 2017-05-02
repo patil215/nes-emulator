@@ -1,5 +1,8 @@
 #include <stdlib.h>
 
+#ifndef _FLAGS_H_
+#define _FLAGS_H_
+
 class Flags {
 	private:
 		bool flags[8];
@@ -35,3 +38,5 @@ class Flags {
 		void autoSetS(int8_t result);
 		void autoSetZ(int8_t result);
 };
+
+#endif

@@ -5,6 +5,12 @@ Memory::Memory() {
    SP = 0x1FF;
 }
 
+void Memory::setup(unsigned char * prg, int prg_size) {
+   for (int i = 0; i < prg_size; i++) {
+    write(prg[i], i + 0x8000);
+  }
+}
+
 void Memory::write(int8_t val, u_int16_t adr) {
   if ((adr >= 0 && adr <= 0x7FF)) {
     memory[adr] = val;

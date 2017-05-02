@@ -2,11 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "nes.h"
+#include "flags.h"
 #include "inst.h"
 #include "memory.h"
 
 // ROM associated variables
-unsigned char * buffer;
+unsigned char * prg;
+unsigned char * chr;
 int Prg_Size;
 int Chr_Size;
 
@@ -73,12 +75,6 @@ void incrementPc(Inst inst) {
   }
 }
 
-void setupMem() {
-  for (int i = 0; i < Prg_Size; i++) {
-    memory.write(buffer[i + 16], i + 0x8000);
-  }
-}
-
 
 void execute(Inst inst) {
   int8_t val = inst.val;
@@ -140,64 +136,72 @@ void execute(Inst inst) {
     {
       if (!flags.getS()) {
         pc += val;
-      } 
-      incrementPc(inst);
+      } else {
+        incrementPc(inst);
+      }
       break;
     }
     case Inst::BMI:
     {
       if(flags.getS()) {
         pc += val;
+      } else {
+        incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BVC:
     {
       if(!flags.getV()) {
         pc += val;
+      } else {
+        incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BVS:
     {
       if(flags.getV()) {
         pc += val;
+      } else {
+        incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BCC:
     {
       if(!flags.getC()) {
         pc += val;
+      } else {
+        incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BCS:
     {
       if(flags.getC()) {
         pc += val;
+      } else {
+        incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BNE:
     {
       if(!flags.getZ()) {
         pc += val;
+      } else {
+       incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BEQ:
     {
       if(flags.getZ()) {
         pc += val;
+      } else {
+        incrementPc(inst);
       }
-      incrementPc(inst);
       break;
     }
     case Inst::BRK:
@@ -311,6 +315,7 @@ void execute(Inst inst) {
     case Inst::LDA:
     {
       A = val;
+      printf("%d\n", val);
       flags.autoSetS(A);
       flags.autoSetZ(A);
       incrementPc(inst);
@@ -569,117 +574,15 @@ void execute(Inst inst) {
 }
 
 
-void Inst::readVal() {
-  switch (admode) {
-    case ABSOLUTE:
-      adr = buffer[pos + 2];
-      adr = adr << 8;
-      adr += buffer[pos + 1];
-      val = memory.read(adr);
-      break;
-    case ACCUMULATOR:
-      val = A;
-      break;
-    case IMMEDIATE:
-      val = buffer[pos + 1];
-      break;
-    case ABSOLUTE_X:
-      adr = buffer[pos + 2];
-      adr = adr << 8;
-      adr += buffer[pos + 1];
-      adr += X;
-      val = memory.read(adr);
-      break;
-    case ABSOLUTE_Y:
-      adr = buffer[pos + 2];
-      adr = adr << 8;
-      adr += buffer[pos + 1];
-      adr += Y;
-      val = memory.read(adr);
-      break;
-    case ZERO_PAGE_X:
-      adr = ((int8_t) buffer[pos + 1]) + X;
-      val = memory.read(adr);
-      break;
-    case ZERO_PAGE_Y:
-      adr = ((int8_t) buffer[pos + 1]) + Y;
-      val = memory.read(adr);
-      break;
-    case INDIRECT_X:
-      {
-        int8_t op = buffer[pos + 1];
-        op += X;
-        adr = memory.read(op + 1);
-        adr = adr << 8;
-        adr += memory.read(op);
-        val = memory.read(adr);
-        break;
-      }
-    case INDIRECT:
-      {
-        u_int16_t address = buffer[pos + 2];
-        address = address << 8;
-        address += buffer[pos + 1];
-        adr = memory.read(address + 1);
-        adr = adr << 8;
-        adr += memory.read(address);
-        val = memory.read(adr);
-        break;
-      }
-    case INDIRECT_Y:
-      {
-        int8_t op = buffer[pos + 1];
-        adr = memory.read(op + 1);
-        adr = adr << 8;
-        adr += memory.read(op);
-        adr += Y;
-        val = memory.read(adr);
-        break;
-      }
-    case RELATIVE:
-      val = buffer[pos + 1];
-      break;
-    case ZERO_PAGE:
-      adr = buffer[pos + 1];
-      val = memory.read(adr);
-      break;
-    default:
-      break;
-  }
-}
-
-
-
 void emulate() {
   int numToRun = 100;
   for(int i = 0; i < numToRun; i++) {
-    Inst inst = parseInstruction(pc, buffer);
+    Inst inst = parseInstruction(pc, memory);
+    loadVal(inst, memory, X, Y, A, pc);
 
-    if (inst.type == Inst::JSR && inst.admode == Inst::ABSOLUTE) {
-      cout << "doing absolute jump to address " << inst.adr <<  "\n";
-    }
-
-    if (inst.type == Inst::LDY) {
-      cout << "loading into register y " << (int) inst.val << " with address " << inst.adr << "\n";
-    }
-    
-    if (inst.type == Inst::LDX) {
-      cout << "loading into register x " << (int) inst.val << " with address " << inst.adr << "\n";
-    }
-
-    if (inst.type == Inst::TAX) {
-      cout << "loading into X from accumulator (value " << (int) A << ")\n";
-    }
-
-    if (inst.type == Inst::TAY) {
-      cout << "loading into Y from accumulator (value " << (int) A << ")\n";
-    }
-
-    if (inst.type == Inst::NOP) {
-      cout << "no op " << "\n";
-    }
-
-    cout << "PC: " << hex << pc << "\n";
+    cout << hex << pc << ":\t";
+    cout << inst.TypeNames[inst.type];
+    cout << "\n";
 
     execute(inst);
 
@@ -696,7 +599,7 @@ int main(int argc, char * argv[]) {
   fseek (file, 0, SEEK_END);
   lSize = ftell (file);
   rewind (file);
-  buffer = (unsigned char * ) malloc(sizeof(unsigned char) * lSize);
+  unsigned char * buffer = (unsigned char * ) malloc(sizeof(unsigned char) * lSize);
   fread(buffer, 1, lSize, file);
 
   Nes_Hdr * header = (Nes_Hdr *) (buffer);
@@ -705,21 +608,19 @@ int main(int argc, char * argv[]) {
   Prg_Size = header->Prg_Size * 16384;
   Chr_Size = header->Chr_Size * 8192;
 
-
-  /*// TODO: Account for trainer
+  // TODO: Account for trainer
   prg = (unsigned char *) malloc(sizeof(unsigned char) * Prg_Size);
   chr = (unsigned char *) malloc(sizeof(unsigned char) * Chr_Size);
-
   // Read into PRG and CHR rom
   for (int i = 0; i < Prg_Size; i++) {
     prg[i] = buffer[i + Nes_HeaderSize];
   }
   for (int i = 0; i < Chr_Size; i++) {
     chr[i] = buffer[i + Nes_HeaderSize + Prg_Size];
-  }*/
+  }
 
-  pc = 16;
-  setupMem();
+  memory.setup(prg, Prg_Size);
+  pc = 0x8000; // TODO this isn't always what you want I think
   emulate();
 }
 
