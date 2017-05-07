@@ -353,13 +353,19 @@ Inst parseInstruction(int pos, Memory & memory) {
   }
 }
 
-void loadVal(Inst & inst, Memory & memory, int8_t X, int8_t Y, int8_t A, int pos) {
+u_int16_t readDoubleByte(u_int16_t pos, Memory & memory) {
+  u_int16_t res = memory.read(pos + 2);
+  res = res << 8;
+  res += memory.read(pos + 1);
+  return res;
+}
+
+void loadVal(Inst & inst, Memory & memory, u_int8_t X, u_int8_t Y, u_int8_t A, int pos) {
+  // TODO the signed unsigned addition casting is all wrong!!!
   Inst::Admode admode = inst.admode;
   switch (admode) {
     case Inst::ABSOLUTE:
-      inst.adr = memory.read(pos + 2);
-      inst.adr = inst.adr << 8;
-      inst.adr += memory.read(pos + 1);
+      inst.adr = readDoubleByte(pos, memory);
       inst.val = memory.read(inst.adr);
       break;
     case Inst::ACCUMULATOR:
@@ -369,30 +375,26 @@ void loadVal(Inst & inst, Memory & memory, int8_t X, int8_t Y, int8_t A, int pos
       inst.val = memory.read(pos + 1);
       break;
     case Inst::ABSOLUTE_X:
-      inst.adr = memory.read(pos + 2);
-      inst.adr = inst.adr << 8;
-      inst.adr += memory.read(pos + 1);
+      inst.adr = readDoubleByte(pos, memory);
       inst.adr += X;
       inst.val = memory.read(inst.adr);
       break;
     case Inst::ABSOLUTE_Y:
-      inst.adr = memory.read(pos + 2);
-      inst.adr = inst.adr << 8;
-      inst.adr += memory.read(pos + 1);
+      inst.adr = readDoubleByte(pos, memory);
       inst.adr += Y;
       inst.val = memory.read(inst.adr);
       break;
     case Inst::ZERO_PAGE_X:
-      inst.adr = ((int8_t) memory.read(pos + 1)) + X;
+      inst.adr = memory.read(pos + 1) + X;
       inst.val = memory.read(inst.adr);
       break;
     case Inst::ZERO_PAGE_Y:
-      inst.adr = ((int8_t) memory.read(pos + 1)) + Y;
+      inst.adr = memory.read(pos + 1) + Y;
       inst.val = memory.read(inst.adr);
       break;
     case Inst::INDIRECT_X:
       {
-        int8_t op = memory.read(pos + 1);
+        u_int8_t op = memory.read(pos + 1);
         op += X;
         inst.adr = memory.read(op + 1);
         inst.adr = inst.adr << 8;
@@ -413,7 +415,7 @@ void loadVal(Inst & inst, Memory & memory, int8_t X, int8_t Y, int8_t A, int pos
       }
     case Inst::INDIRECT_Y:
       {
-        int8_t op = memory.read(pos + 1);
+        u_int8_t op = memory.read(pos + 1);
         inst.adr = memory.read(op + 1);
         inst.adr = inst.adr << 8;
         inst.adr += memory.read(op);
@@ -423,7 +425,6 @@ void loadVal(Inst & inst, Memory & memory, int8_t X, int8_t Y, int8_t A, int pos
       }
     case Inst::RELATIVE:
       inst.val = memory.read(pos + 1);
-      printf("%d\n", inst.val);
       break;
     case Inst::ZERO_PAGE:
       inst.adr = memory.read(pos + 1);

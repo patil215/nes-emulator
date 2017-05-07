@@ -28,15 +28,15 @@ class Flags {
 		void setB(bool result);
 		void setV(bool result);
 		void setS(bool result);
-		void setCB(int result);
-		void setZB(int result);
-		void setIB(int result);
-		void setDB(int result);
-		void setBB(int result);
-		void setVB(int result);
-		void setSB(int result);
-		void autoSetS(int8_t result);
-		void autoSetZ(int8_t result);
+		void setCB(u_int8_t result);
+		void setZB(u_int8_t result);
+		void setIB(u_int8_t result);
+		void setDB(u_int8_t result);
+		void setBB(u_int8_t result);
+		void setVB(u_int8_t result);
+		void setSB(u_int8_t result);
+		void autoSetS(u_int8_t result);
+		void autoSetZ(u_int8_t result);
 };
 
 #endif

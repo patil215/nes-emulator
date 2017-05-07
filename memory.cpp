@@ -1,77 +1,78 @@
 #include <stdlib.h>
 #include "memory.h"
+#include <iostream>
 
 Memory::Memory() {
-   SP = 0x1FF;
+   SP = 0;
 }
 
-void Memory::setup(unsigned char * prg, int prg_size) {
-   for (int i = 0; i < prg_size; i++) {
-    write(prg[i], i + 0x8000);
+/*
+  Memory Structure:
+  0000-002C  TIA Write
+  0000-000D  TIA Read (sometimes mirrored at 0030-003D)
+  0080-00FF  PIA RAM (128 bytes)
+  0280-0297  PIA Ports and Timer
+  F000-FFFF  Cartridge Memory (4 Kbytes area)
+*/
+
+void Memory::setup(unsigned char * prg, int prg_size, int offset) {
+  // Load ROM into memory
+  for (int i = 0; i < prg_size; i++) {
+    write(prg[i], i + offset);
   }
 }
 
-void Memory::write(int8_t val, u_int16_t adr) {
-  if ((adr >= 0 && adr <= 0x7FF)) {
-    memory[adr] = val;
-    memory[adr + 0x800] = val;
-    memory[adr + 0x1000] = val;
-    memory[adr + 0x1800] = val;
-    return;
-  }
-  if ((adr >= 0x800 && adr <= 0xFFF)) {
-    memory[adr] = val;
-    memory[adr - 0x800] = val;
-    memory[adr + 0x800] = val;
-    memory[adr + 0x1000] = val;
-    return;
-  }
-  if ((adr >= 0x1000 && adr <= 0x17FF)) {
-    memory[adr] = val;
-    memory[adr - 0x1000] = val;
-    memory[adr - 0x800] = val;
-    memory[adr + 0x800] = val;
-    return;
-  }
-  if ((adr >= 0x1800 && adr <= 0x1FFF)) {
-    memory[adr] = val;
-    memory[adr - 0x1800] = val;
-    memory[adr - 0x1000] = val;
-    memory[adr - 0x800] = val;
-    return;
-  }
-  if ((adr >= 0x2000 && adr <= 0x3FFF)) {
-    for (int i = 0x2000; i <= 0x3FFF; i++) {
-      if ((i % 8) == (adr % 8)) {
-        memory[i] = val;
-      }
-    }
-    return;
-  }
-  if ((adr >= 0x8000 && adr <= 0xBFFF)) {
-    memory[adr] = val;
-    memory[adr + 0xC000] = val;
-    return;
-  }
-  if ((adr >= 0xC000 && adr <= 0xFFFF)) {
-    memory[adr] = val;
-    memory[adr - 0xC000] = val;
-    return;
-  }
+
+void Memory::writeAndMirror(u_int8_t val, u_int16_t adr, u_int16_t startAddrs[], int startAddrsSize) {
   memory[adr] = val;
+
+  if (startAddrsSize < 2) {
+    return;
+  }
+
+  // Find where the address occurs
+  u_int16_t step = startAddrs[1] - startAddrs[0];
+  int index = 0;
+  for(int i = 0; i < startAddrsSize; i++) {
+    if (adr >= startAddrs[i] && adr < (startAddrs[i] + step)) {
+      index = i;
+      break;
+    }
+  }
+
+
+  // Write all the mirrored addresses under adr
+  for (int i = 0; i < index; i++) {
+    memory[adr - (step * (i + 1))] = val;\
+  }
+
+  // Write all the mirrored address over adr
+  for (int i = 0; i < startAddrsSize - index - 1; i++) {
+    memory[adr + (step * (i + 1))] = val;
+  }
+
 }
 
-int8_t Memory::read(u_int16_t adr) {
+void Memory::write(u_int8_t val, u_int16_t adr) {
+  // Default case: no other mirroring
+  // All memory is mirrored in steps of 2000h (ie. at 2000h-3FFFh, 4000h-5FFFh, and so on, up to E000h-FFFFh)
+  u_int16_t memoryMirrorAddrs[] = { 0x0000, 0x2000, 0x4000, 0x6000, 0x8000, 0xa000, 0xc000, 0xe000 };
+  writeAndMirror(val, adr, memoryMirrorAddrs, 8);
+
+  // TODO: There's a lot of other mirroring... we'll worry about it later
+}
+
+u_int8_t Memory::read(u_int16_t adr) {
 	return memory[adr];
 }
 
-void Memory::push(int8_t value) {
+void Memory::push(u_int8_t value) {
   SP--;
-  memory[SP] = value;
+  memory[SP + 0x0100] = value;
 }
 
-int8_t Memory::pop() {
-  int8_t value = memory[SP];
+u_int8_t Memory::pop() {
+  u_int8_t value = memory[SP + 0x0100];
   SP++;
   return value;
 }

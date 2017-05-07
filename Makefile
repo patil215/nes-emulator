@@ -5,4 +5,4 @@ clean:
 	rm emu
 
 run:
-	./emu duck-hunt.nes
+	./emu atariroms/SPCINVAD.BIN

@@ -7,17 +7,15 @@
 #include "memory.h"
 
 // ROM associated variables
-unsigned char * prg;
-unsigned char * chr;
+u_int8_t * prg;
 int Prg_Size;
-int Chr_Size;
 
 // Hardware associated variables
 // TODO: Might have to initialize variables
-int pc;
-int8_t X;
-int8_t Y;
-int8_t A;
+u_int16_t pc;
+u_int8_t X;
+u_int8_t Y;
+u_int8_t A;
 Flags flags;
 // TODO load program into memory, account for PRG-ROM, SRAM, Expansion ROM, I/O Registers
 Memory memory;
@@ -64,8 +62,8 @@ void incrementPc(Inst inst) {
       pc += 1;
       break;
     case Inst::RELATIVE:
-      break;
       pc += 2;
+      break;
     case Inst::ZERO_PAGE:
       pc += 2;
       break;
@@ -77,37 +75,42 @@ void incrementPc(Inst inst) {
 
 
 void execute(Inst inst) {
-  int8_t val = inst.val;
+  u_int8_t val = inst.val;
   u_int16_t adr = inst.adr;
   Inst::Admode admode = inst.admode;
   switch (inst.type) {
     case Inst::ADC:
     {
       u_int8_t carry = flags.getCB();
-      // TODO: this logic might not be right
-      int16_t notoverflow = ((int16_t) A) + ((int16_t) val) + carry;
-      // TODO: this logic definitely not right
-      u_int16_t notcarry = ((u_int16_t) A) + ((u_int16_t) val) + carry;
+      u_int8_t result = A + val + carry;
 
-      A = A + val + carry;
-      flags.autoSetS(A);
-      flags.setV(notoverflow != A);
-      flags.autoSetZ(A);
-      flags.setC(notcarry != ((u_int8_t) A));
+      A = result;
+
+      bool isOverflow = ((A ^ result) & (val ^ result) & 0x80) != 0;
+      bool isCarry = (((u_int16_t) A) + ((u_int16_t) val) + ((u_int16_t) carry)) > 255;
+
+      flags.setV(isOverflow);
+      flags.setC(isCarry);
+      flags.autoSetS(result);
+      flags.autoSetZ(result);
+
       incrementPc(inst);
       break;
     }
     case Inst::AND:
     {
-      A = A & val;
-      flags.autoSetZ(A);
-      flags.autoSetS(A);
+      u_int8_t result = A & val;
+
+      A = result;
+
+      flags.autoSetZ(result);
+      flags.autoSetS(result);
+
       incrementPc(inst);
       break;
     }
     case Inst::ASL:
-    {
-      
+    { 
       flags.setCB(val & 0x80);
       // TODO is this actually an arithmetic shift
       val = val << 1;
@@ -125,83 +128,74 @@ void execute(Inst inst) {
     }
     case Inst::BIT:
     {
-      // TODO Probably bug
       flags.setSB(0x80 & val);
       flags.setVB(0x40 & val);
-      flags.setZB(val & A);
+      flags.autoSetZ(val & A);
       incrementPc(inst);
       break;
     }
     case Inst::BPL:
     {
       if (!flags.getS()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BMI:
     {
       if(flags.getS()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BVC:
     {
       if(!flags.getV()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BVS:
     {
       if(flags.getV()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BCC:
     {
       if(!flags.getC()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BCS:
     {
       if(flags.getC()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BNE:
     {
       if(!flags.getZ()) {
-        pc += val;
-      } else {
-       incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BEQ:
     {
       if(flags.getZ()) {
-        pc += val;
-      } else {
-        incrementPc(inst);
+        pc += ((int8_t) val);
       }
+      incrementPc(inst);
       break;
     }
     case Inst::BRK:
@@ -212,6 +206,7 @@ void execute(Inst inst) {
     }
     case Inst::CMP:
     {
+      // TODO
       flags.setC(A >= val);
       flags.autoSetZ(A - val);
       flags.autoSetS(A - val);
@@ -220,6 +215,7 @@ void execute(Inst inst) {
     }
     case Inst::CPX:
     {
+      // TODO
       flags.setC(X >= val);
       flags.autoSetZ(X - val);
       flags.autoSetS(X - val);
@@ -228,6 +224,7 @@ void execute(Inst inst) {
     }
     case Inst::CPY:
     {
+      // TODO
       flags.setC(Y >= val);
       flags.autoSetZ(Y - val);
       flags.autoSetS(Y - val);
@@ -236,9 +233,10 @@ void execute(Inst inst) {
     }
     case Inst::DEC:
     {
-      memory.write(memory.read(adr) - 1, adr);
-      flags.autoSetS(memory.read(adr));
-      flags.autoSetZ(memory.read(adr));
+      u_int8_t result = memory.read(adr) - 1;
+      memory.write(result, adr);
+      flags.autoSetS(result);
+      flags.autoSetZ(result);
       incrementPc(inst);
       break;
     }
@@ -294,9 +292,10 @@ void execute(Inst inst) {
     }
     case Inst::INC:
     {
-      memory.write(memory.read(adr) + 1, adr);
-      flags.autoSetS(memory.read(adr));
-      flags.autoSetZ(memory.read(adr));
+      u_int8_t result = memory.read(adr) + 1;
+      memory.write(result, adr);
+      flags.autoSetS(result);
+      flags.autoSetZ(result);
       incrementPc(inst);
       break;
     }
@@ -315,25 +314,24 @@ void execute(Inst inst) {
     case Inst::LDA:
     {
       A = val;
-      printf("%d\n", val);
-      flags.autoSetS(A);
-      flags.autoSetZ(A);
+      flags.autoSetS(val);
+      flags.autoSetZ(val);
       incrementPc(inst);
       break;
     }
     case Inst::LDX:
       {
       X = val;
-      flags.autoSetS(X);
-      flags.autoSetZ(X);
+      flags.autoSetS(val);
+      flags.autoSetZ(val);
       incrementPc(inst);
       break;
       }
     case Inst::LDY:
       {
       Y = val;
-      flags.autoSetS(Y);
-      flags.autoSetZ(Y);
+      flags.autoSetS(val);
+      flags.autoSetZ(val);
       incrementPc(inst);
       break;
       }
@@ -470,7 +468,6 @@ void execute(Inst inst) {
     case Inst::RTI:
       {
         memory.popFlags(flags);
-        // TODO this might be only 1 byte
         u_int16_t newAdr = memory.pop();
         newAdr = newAdr << 8;
         newAdr += memory.pop();
@@ -483,23 +480,25 @@ void execute(Inst inst) {
         newAdr = newAdr << 8;
         newAdr += memory.pop();
         pc = newAdr + 1;
-        // TODO does this need flags
         break;
       }
     case Inst::SBC:
       {
+        // SBC of A + B + carry is same as A + (ones complement of B) + carry
         u_int8_t borrow = flags.getCB();
-        A = A - val - borrow;
 
-        // TODO: this logic might not be right
-        int16_t notoverflow = ((int16_t) A) - ((int16_t) val) - borrow;
-        // TODO: this logic definitely not right
-        u_int16_t notcarry = ((u_int16_t) A) - ((u_int16_t) val) - borrow;
+        u_int8_t result = A + (255 - val) + borrow;
 
-        flags.autoSetZ(A);
-        flags.autoSetS(A);
-        flags.setV(notoverflow != A);
-        flags.setC(notcarry != (u_int8_t) A);
+        bool isOverflow = ((A ^ result) & ((255 - val) ^ result) & 0x80) != 0;
+        bool isCarry = (((u_int16_t) A) + ((u_int16_t) (255 - val)) + ((u_int16_t) borrow)) > 255;
+
+        A = result;
+
+        flags.setV(isOverflow);
+        flags.setC(isCarry);
+        flags.autoSetS(result);
+        flags.autoSetZ(result);
+
         incrementPc(inst);
         break;
       }
@@ -575,13 +574,12 @@ void execute(Inst inst) {
 
 
 void emulate() {
-  int numToRun = 100;
+  int numToRun = 1000;
   for(int i = 0; i < numToRun; i++) {
     Inst inst = parseInstruction(pc, memory);
     loadVal(inst, memory, X, Y, A, pc);
 
     cout << hex << pc << ":\t";
-    cout << inst.TypeNames[inst.type];
     cout << "\n";
 
     execute(inst);
@@ -599,28 +597,17 @@ int main(int argc, char * argv[]) {
   fseek (file, 0, SEEK_END);
   lSize = ftell (file);
   rewind (file);
-  unsigned char * buffer = (unsigned char * ) malloc(sizeof(unsigned char) * lSize);
+  u_int8_t * buffer = (u_int8_t * ) malloc(sizeof(u_int8_t) * lSize);
   fread(buffer, 1, lSize, file);
+  prg = (u_int8_t *) malloc(sizeof(u_int8_t) * Prg_Size);
 
-  Nes_Hdr * header = (Nes_Hdr *) (buffer);
-
-  // Convert sizes to # bytes
-  Prg_Size = header->Prg_Size * 16384;
-  Chr_Size = header->Chr_Size * 8192;
-
-  // TODO: Account for trainer
-  prg = (unsigned char *) malloc(sizeof(unsigned char) * Prg_Size);
-  chr = (unsigned char *) malloc(sizeof(unsigned char) * Chr_Size);
-  // Read into PRG and CHR rom
-  for (int i = 0; i < Prg_Size; i++) {
-    prg[i] = buffer[i + Nes_HeaderSize];
-  }
-  for (int i = 0; i < Chr_Size; i++) {
-    chr[i] = buffer[i + Nes_HeaderSize + Prg_Size];
+  for (int i = 0; i < lSize; i++) {
+    prg[i] = buffer[i];
   }
 
-  memory.setup(prg, Prg_Size);
-  pc = 0x8000; // TODO this isn't always what you want I think
+  int start = 0xF000;
+  memory.setup(prg, lSize, start);
+  pc = start; // TODO this may not necessarily be what is wanted
   emulate();
 }
 
